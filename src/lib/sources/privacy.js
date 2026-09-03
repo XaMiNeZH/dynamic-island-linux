@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import GLib from 'gi://GLib';
+import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
@@ -28,8 +29,24 @@ export class PrivacySource {
         });
 
         this._destroyed = false;
+        this._watchCamera();
         this._watchRecording();
         this._watchMixer();
+    }
+
+    _watchCamera() {
+        try {
+            if (!Shell.CameraMonitor)
+                return;
+            this._cameraMonitor = new Shell.CameraMonitor();
+            this._camera = !!this._cameraMonitor.cameras_in_use;
+            this._tracker.connect(this._cameraMonitor, 'notify::cameras-in-use', () => {
+                this._camera = !!this._cameraMonitor.cameras_in_use;
+                this._publish();
+            });
+        } catch {
+            this._cameraMonitor = null;
+        }
     }
 
     _watchRecording() {
@@ -170,6 +187,7 @@ export class PrivacySource {
         }
         this._stack.remove('privacy');
         this._stack.remove('recording');
+        this._cameraMonitor = null;
         this._stack = null;
         this._settings = null;
         this._mixer = null;
