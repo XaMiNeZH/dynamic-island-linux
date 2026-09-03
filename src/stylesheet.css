@@ -1,0 +1,119 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
+#panel .panel-button.dynamic-island-button {
+    -natural-hpadding: 4px;
+    -minimum-hpadding: 4px;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+#panel .panel-button.dynamic-island-button:hover,
+#panel .panel-button.dynamic-island-button:active,
+#panel .panel-button.dynamic-island-button:overview,
+#panel .panel-button.dynamic-island-button:focus {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.dynamic-island-capsule {
+    background-color: rgba(8, 8, 10, 0.96);
+    border-radius: 14px;
+    padding: 0 12px;
+    color: #f4f4f5;
+}
+
+.dynamic-island-capsule.dynamic-island-overlay {
+    box-shadow: 0 10px 28px 0 rgba(0, 0, 0, 0.45);
+    padding: 10px 14px;
+}
+
+.dynamic-island-clock {
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    color: #f4f4f5;
+}
+
+.dynamic-island-title {
+    font-weight: 600;
+    font-size: 12px;
+    color: #fafafa;
+}
+
+.dynamic-island-subtitle {
+    font-size: 11px;
+    color: #a1a1aa;
+}
+
+.dynamic-island-osd-label {
+    font-weight: 600;
+    font-size: 12px;
+    color: #f4f4f5;
+    min-width: 36px;
+}
+
+.dynamic-island-row {
+    spacing: 8px;
+}
+
+.dynamic-island-text-col {
+    spacing: 2px;
+    padding-left: 8px;
+}
+
+.dynamic-island-icon {
+    color: #f4f4f5;
+}
+
+.dynamic-island-art {
+    border-radius: 6px;
+}
+
+.dynamic-island-icon-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    background-color: rgba(255, 255, 255, 0.08);
+    padding: 4px;
+}
+
+.dynamic-island-icon-button:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.dynamic-island-icon-button:active {
+    background-color: rgba(255, 255, 255, 0.24);
+}
+
+.dynamic-island-controls {
+    spacing: 10px;
+    padding-top: 8px;
+}
+
+.dynamic-island-level {
+    background-color: #3f3f46;
+    border-radius: 2px;
+    min-width: 120px;
+    height: 4px;
+}
+
+.dynamic-island-level-fill {
+    background-color: #fafafa;
+    border-radius: 2px;
+    height: 4px;
+}
+
+.dynamic-island-recording .dynamic-island-icon,
+.dynamic-island-recording .dynamic-island-title {
+    color: #fb7185;
+}
+
+.dynamic-island-media-expanded,
+.dynamic-island-notification,
+.dynamic-island-system,
+.dynamic-island-osd,
+.dynamic-island-idle,
+.dynamic-island-media-compact {
+    spacing: 8px;
+}

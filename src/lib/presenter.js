@@ -1,0 +1,112 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import GLib from 'gi://GLib';
+
+import {Kind} from './activity-stack.js';
+import {geometryFor} from './constants.js';
+import {buildView} from './views.js';
+import {openDateMenu} from './clock.js';
+
+export class Presenter {
+    constructor({island, stack, settings, clock, Main}) {
+        this._island = island;
+        this._stack = stack;
+        this._settings = settings;
+        this._clock = clock;
+        this._Main = Main;
+        this._expireId = 0;
+        this._destroyed = false;
+
+        this._unsubStack = stack.onChange(activity => this._render(activity));
+        this._unsubClock = clock.onTick(text => {
+            if (this._destroyed)
+                return;
+            if (this._stack.current().kind === Kind.IDLE)
+                this._island.updateClock(text);
+        });
+
+        this._primaryId = island.connect('primary-click', () => this._onPrimary());
+        this._secondaryId = island.connect('secondary-click', () => openDateMenu(this._Main));
+
+        this._render(stack.current());
+    }
+
+    _duration() {
+        return this._settings.get_int('animation-duration');
+    }
+
+    _onPrimary() {
+        const cur = this._stack.current();
+        if (cur.kind === Kind.IDLE)
+            return;
+
+        if (cur.kind === Kind.NOTIFICATION) {
+            try {
+                cur.payload?.activate?.();
+            } catch {
+                // notification already gone
+            }
+            this._stack.remove(cur.id);
+            return;
+        }
+
+        if (cur.kind === Kind.MEDIA || cur.kind === Kind.RECORDING) {
+            this._stack.toggleExpanded();
+            return;
+        }
+
+        if (!cur.persistent)
+            this._stack.remove(cur.id);
+    }
+
+    _render(activity) {
+        if (this._destroyed)
+            return;
+
+        const actor = buildView(activity, this._clock.text);
+        this._island.setContent(actor);
+        const geom = geometryFor(activity.kind, activity.expanded);
+        this._island.morphTo(geom, this._duration()).catch(() => {});
+        this._armExpiry();
+    }
+
+    _armExpiry() {
+        if (this._expireId) {
+            GLib.source_remove(this._expireId);
+            this._expireId = 0;
+        }
+
+        const next = this._stack.nextExpiryAt();
+        if (next == null)
+            return;
+
+        const delay = Math.max(16, next - Date.now());
+        this._expireId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
+            this._expireId = 0;
+            this._stack.expireDue();
+            this._armExpiry();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    destroy() {
+        this._destroyed = true;
+        if (this._expireId) {
+            GLib.source_remove(this._expireId);
+            this._expireId = 0;
+        }
+        this._unsubStack?.();
+        this._unsubClock?.();
+        if (this._island && this._primaryId)
+            this._island.disconnect(this._primaryId);
+        if (this._island && this._secondaryId)
+            this._island.disconnect(this._secondaryId);
+        this._primaryId = 0;
+        this._secondaryId = 0;
+        this._island = null;
+        this._stack = null;
+        this._settings = null;
+        this._clock = null;
+        this._Main = null;
+    }
+}

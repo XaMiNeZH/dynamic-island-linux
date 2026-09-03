@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import GLib from 'gi://GLib';
+
+export class SourceTracker {
+    constructor() {
+        this._timeouts = new Set();
+        this._signals = [];
+        this._subscriptions = [];
+    }
+
+    timeoutAdd(ms, fn) {
+        const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            const result = fn();
+            if (result !== GLib.SOURCE_CONTINUE)
+                this._timeouts.delete(id);
+            return result;
+        });
+        this._timeouts.add(id);
+        return id;
+    }
+
+    timeoutAddOnce(ms, fn) {
+        const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            this._timeouts.delete(id);
+            fn();
+            return GLib.SOURCE_REMOVE;
+        });
+        this._timeouts.add(id);
+        return id;
+    }
+
+    timeoutRemove(id) {
+        if (!id || !this._timeouts.has(id))
+            return;
+        GLib.source_remove(id);
+        this._timeouts.delete(id);
+    }
+
+    connect(obj, signal, fn) {
+        const id = obj.connect(signal, fn);
+        this._signals.push([obj, id]);
+        return id;
+    }
+
+    subscribe(...args) {
+        const id = args[0].signal_subscribe(...args.slice(1));
+        this._subscriptions.push([args[0], id]);
+        return id;
+    }
+
+    destroy() {
+        for (const id of this._timeouts)
+            GLib.source_remove(id);
+        this._timeouts.clear();
+
+        for (const [obj, id] of this._signals) {
+            try {
+                obj.disconnect(id);
+            } catch {
+                // actor already disposed
+            }
+        }
+        this._signals = [];
+
+        for (const [bus, id] of this._subscriptions) {
+            try {
+                bus.signal_unsubscribe(id);
+            } catch {
+                // bus already gone
+            }
+        }
+        this._subscriptions = [];
+    }
+}
+
+export function themedIconName(icon) {
+    if (!icon)
+        return '';
+    if (typeof icon === 'string')
+        return icon;
+    if (icon.names?.length)
+        return icon.names[0];
+    if (icon.iconName)
+        return icon.iconName;
+    try {
+        return icon.to_string?.() ?? '';
+    } catch {
+        return '';
+    }
+}
+
+export function classifyOsd(icon, label) {
+    const text = `${themedIconName(icon)} ${label ?? ''}`.toLowerCase();
+    if (text.includes('bright') || text.includes('display-brightness') || text.includes('sun'))
+        return 'brightness';
+    if (text.includes('mic') || text.includes('audio-input') || text.includes('microphone'))
+        return 'mute';
+    if (text.includes('airplane') || text.includes('flight') || text.includes('rfkill'))
+        return 'mute';
+    return 'volume';
+}
+
+export function formatClock(dateTime, {use24h, showSeconds}) {
+    if (use24h) {
+        return showSeconds
+            ? dateTime.format('%H:%M:%S')
+            : dateTime.format('%H:%M');
+    }
+    const raw = showSeconds
+        ? dateTime.format('%l:%M:%S %p')
+        : dateTime.format('%l:%M %p');
+    return raw.replace(/^\s+/, '');
+}

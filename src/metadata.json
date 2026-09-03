@@ -1,0 +1,10 @@
+{
+    "uuid": "dynamic-island@xaminezh.xyz",
+    "name": "Dynamic Island",
+    "description": "A native Apple-style Dynamic Island for GNOME. Replaces the top-center clock with a living pill that morphs for notifications, media, volume, brightness, charging, Bluetooth, and privacy events.",
+    "shell-version": ["49", "50", "51"],
+    "url": "https://github.com/XaMiNeZH/dynamic-island-linux",
+    "version-name": "0.1.0",
+    "settings-schema": "org.gnome.shell.extensions.dynamic-island",
+    "gettext-domain": "dynamic-island"
+}
