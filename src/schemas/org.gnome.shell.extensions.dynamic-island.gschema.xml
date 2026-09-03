@@ -45,7 +45,7 @@
       <description>One of follow, 12h, or 24h. follow uses the GNOME system setting.</description>
     </key>
     <key name="animation-duration" type="i">
-      <default>360</default>
+      <default>420</default>
       <summary>Morph duration in milliseconds</summary>
     </key>
     <key name="notification-timeout" type="i">

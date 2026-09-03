@@ -43,8 +43,8 @@ export default class DynamicIslandExtension extends Extension {
 
         this._sessionId = Main.sessionMode.connect('updated', () => {
             setDateMenuVisible(Main, false);
-            this._island?.forceDock();
             this._stack?.collapse();
+            this._island?.relayout(false);
         });
     }
 

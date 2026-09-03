@@ -1,7 +1,7 @@
 #!/usr/bin/env gjs
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import {clamp, lerp, easeOutBack, easeOutCubic, morphFrame, sameGeometry} from '../src/lib/motion.js';
+import {activityKey, clamp, lerp, easeOutBack, easeOutCubic, morphFrame, sameGeometry} from '../src/lib/motion.js';
 import {geometryFor, Geometry} from '../src/lib/constants.js';
 
 let passed = 0;
@@ -34,8 +34,11 @@ assert(!sameGeometry(Geometry.idle, Geometry.osd), 'sameGeometry false');
 assert(geometryFor('idle').width === Geometry.idle.width, 'idle geom');
 assert(geometryFor('media', false).width === Geometry.compact.width, 'media compact');
 assert(geometryFor('media', true).width === Geometry.mediaExpanded.width, 'media expanded');
-assert(geometryFor('notification').overlay === true, 'notification overlays');
-assert(geometryFor('volume').overlay === false, 'osd stays in panel');
+assert(geometryFor('notification').height > geometryFor('idle').height, 'notification is taller');
+assert(geometryFor('volume').height === geometryFor('idle').height, 'osd stays compact height');
+assert(geometryFor('media', false).width > geometryFor('idle').width, 'compact media is wider');
+assert(activityKey({id: 'media', kind: 'media', expanded: false}) === 'media:media:0', 'activity key compact');
+assert(activityKey({id: 'media', kind: 'media', expanded: true}) === 'media:media:1', 'activity key expanded');
 
 print(`motion: ${passed} passed, ${failed} failed`);
 if (failed)

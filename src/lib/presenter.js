@@ -4,8 +4,9 @@ import GLib from 'gi://GLib';
 
 import {Kind} from './activity-stack.js';
 import {geometryFor} from './constants.js';
-import {buildView} from './views.js';
 import {openDateMenu} from './clock.js';
+import {activityKey} from './motion.js';
+import {buildView} from './views.js';
 
 export class Presenter {
     constructor({island, stack, settings, clock, Main}) {
@@ -16,13 +17,14 @@ export class Presenter {
         this._Main = Main;
         this._expireId = 0;
         this._destroyed = false;
+        this._key = '';
+        this._view = null;
 
         this._unsubStack = stack.onChange(activity => this._render(activity));
         this._unsubClock = clock.onTick(text => {
             if (this._destroyed)
                 return;
-            if (this._stack.current().kind === Kind.IDLE)
-                this._island.updateClock(text);
+            this._island.updateClock(text);
         });
 
         this._primaryId = island.connect('primary-click', () => this._onPrimary());
@@ -32,13 +34,15 @@ export class Presenter {
     }
 
     _duration() {
-        return this._settings.get_int('animation-duration');
+        return Math.max(280, this._settings.get_int('animation-duration'));
     }
 
     _onPrimary() {
         const cur = this._stack.current();
-        if (cur.kind === Kind.IDLE)
+        if (cur.kind === Kind.IDLE) {
+            this._island.bounce();
             return;
+        }
 
         if (cur.kind === Kind.NOTIFICATION) {
             try {
@@ -63,9 +67,22 @@ export class Presenter {
         if (this._destroyed)
             return;
 
-        const actor = buildView(activity, this._clock.text);
-        this._island.setContent(actor);
+        const key = activityKey(activity);
         const geom = geometryFor(activity.kind, activity.expanded);
+
+        if (key === this._key && this._view?.update) {
+            this._view.update(activity.payload, this._clock.text);
+            this._island.morphTo(geom, this._duration()).catch(() => {});
+            this._armExpiry();
+            return;
+        }
+
+        this._key = key;
+        const actor = buildView(activity, this._clock.text);
+        this._view = actor;
+        const fade = this._island.geometry.height !== geom.height ||
+            this._island.geometry.width !== geom.width;
+        this._island.setContent(actor, {fade});
         this._island.morphTo(geom, this._duration()).catch(() => {});
         this._armExpiry();
     }
@@ -103,6 +120,7 @@ export class Presenter {
             this._island.disconnect(this._secondaryId);
         this._primaryId = 0;
         this._secondaryId = 0;
+        this._view = null;
         this._island = null;
         this._stack = null;
         this._settings = null;

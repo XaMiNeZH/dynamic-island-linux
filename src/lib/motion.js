@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Geometry easing used by tests and documented for the Clutter morph.
 
 export function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -27,7 +26,7 @@ export function morphFrame(from, to, t, easing = easeOutBack) {
     return {
         width: lerp(from.width, to.width, k),
         height: lerp(from.height, to.height, k),
-        radius: lerp(from.radius ?? 14, to.radius ?? 14, k),
+        radius: lerp(from.radius ?? 17, to.radius ?? 17, k),
     };
 }
 
@@ -36,5 +35,9 @@ export function sameGeometry(a, b) {
         return false;
     return a.width === b.width &&
         a.height === b.height &&
-        !!a.overlay === !!b.overlay;
+        (a.radius ?? 0) === (b.radius ?? 0);
+}
+
+export function activityKey(activity) {
+    return `${activity.id}:${activity.kind}:${activity.expanded ? 1 : 0}`;
 }

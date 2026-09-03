@@ -33,9 +33,9 @@ Disable restores the GNOME clock, notification banners, and stock OSD.
 
 | State | What you see |
 | --- | --- |
-| Idle | Compact black pill with the clock that used to live in the panel |
-| Notification | Pill expands into a card; click opens the app |
-| Media | Compact art + glyph while something is playing; click expands transport controls |
+| Idle | Top-center notch with the clock; tap for a bounce, right-click for calendar |
+| Notification | Pill springs into a card; click opens the app |
+| Media | Album art and a live equalizer keep the clock in the middle; click expands transport |
 | Volume / brightness / mute | Island takes over the GNOME OSD |
 | Charging | Percentage when you plug in |
 | Bluetooth | Device name on connect |

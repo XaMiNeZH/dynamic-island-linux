@@ -5,12 +5,12 @@ export const ROLE = 'dynamic-island';
 export const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.dynamic-island';
 
 export const Geometry = {
-    idle: {width: 128, height: 28, overlay: false, radius: 14},
-    compact: {width: 168, height: 28, overlay: false, radius: 14},
-    osd: {width: 228, height: 28, overlay: false, radius: 14},
-    system: {width: 220, height: 40, overlay: true, radius: 20},
-    notification: {width: 320, height: 68, overlay: true, radius: 22},
-    mediaExpanded: {width: 304, height: 92, overlay: true, radius: 24},
+    idle: {width: 126, height: 34, radius: 17},
+    compact: {width: 198, height: 34, radius: 17},
+    osd: {width: 252, height: 34, radius: 17},
+    system: {width: 248, height: 44, radius: 22},
+    notification: {width: 348, height: 80, radius: 26},
+    mediaExpanded: {width: 332, height: 118, radius: 30},
 };
 
 export function geometryFor(kind, expanded = false) {
@@ -25,6 +25,7 @@ export function geometryFor(kind, expanded = false) {
         return Geometry.osd;
     case 'charging':
     case 'bluetooth':
+        return Geometry.system;
     case 'privacy':
     case 'recording':
         return expanded ? Geometry.system : Geometry.compact;
@@ -32,4 +33,8 @@ export function geometryFor(kind, expanded = false) {
     default:
         return Geometry.idle;
     }
+}
+
+export function isExpandedGeometry(geom) {
+    return (geom?.height ?? 0) > 40;
 }

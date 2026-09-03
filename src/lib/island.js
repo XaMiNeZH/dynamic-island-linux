@@ -8,6 +8,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
+import {Geometry, isExpandedGeometry} from './constants.js';
 import {sameGeometry} from './motion.js';
 
 export const Island = GObject.registerClass({
@@ -23,11 +24,22 @@ export const Island = GObject.registerClass({
         this.add_style_class_name('dynamic-island-button');
         this.accessible_role = Atk.Role.PUSH_BUTTON;
         this.accessible_name = extension.gettext('Dynamic Island');
+        this.reactive = false;
+        this.can_focus = false;
+        this.track_hover = false;
 
-        this._inOverlay = false;
-        this._geom = {width: 128, height: 28, overlay: false, radius: 14};
-        this._morphing = false;
-        this._spacer = null;
+        this._geom = {...Geometry.idle};
+        this._morphGen = 0;
+        this._contentGen = 0;
+        this._chrome = false;
+
+        this._spacer = new St.Widget({
+            style_class: 'dynamic-island-spacer',
+            width: Geometry.idle.width,
+            height: 1,
+            x_expand: false,
+        });
+        this.add_child(this._spacer);
 
         this._capsule = new St.Bin({
             style_class: 'dynamic-island-capsule',
@@ -36,28 +48,64 @@ export const Island = GObject.registerClass({
             can_focus: true,
             x_expand: false,
             y_expand: false,
-            x_align: Clutter.ActorAlign.CENTER,
-            y_align: Clutter.ActorAlign.CENTER,
         });
         this._capsule.clip_to_allocation = true;
+        this._capsule.set_pivot_point(0.5, 0);
+        this._capsule.accessible_name = extension.gettext('Dynamic Island');
         this._capsule.set_size(this._geom.width, this._geom.height);
+        this._applyRadius(this._geom.radius);
 
         this._content = new St.Bin({
+            style_class: 'dynamic-island-content',
             x_expand: true,
             y_expand: true,
-            x_align: Clutter.ActorAlign.CENTER,
-            y_align: Clutter.ActorAlign.CENTER,
+            x_align: Clutter.ActorAlign.FILL,
+            y_align: Clutter.ActorAlign.FILL,
+            opacity: 255,
         });
         this._capsule.set_child(this._content);
-        this.add_child(this._capsule);
 
         this._capsule.connect('button-press-event', (_actor, event) => this._onPress(event));
+        this._capsule.connect('notify::hover', () => this._onHover());
         this._tryClickGesture(this._capsule);
 
-        this._monitorsId = Main.layoutManager.connect('monitors-changed', () => {
-            if (this._inOverlay)
-                this._positionOverlay();
-        });
+        this._mountChrome();
+        this.relayout(false);
+
+        this._monitorsId = Main.layoutManager.connect('monitors-changed', () => this.relayout(false));
+    }
+
+    _mountChrome() {
+        try {
+            Main.layoutManager.addChrome(this._capsule, {
+                affectsInputRegion: true,
+                affectsStruts: false,
+            });
+            this._chrome = true;
+        } catch {
+            Main.layoutManager.uiGroup.add_child(this._capsule);
+            this._chrome = false;
+        }
+        try {
+            this._capsule.get_parent()?.set_child_above_sibling(this._capsule, null);
+        } catch {
+            // stacking not available
+        }
+    }
+
+    _unmountChrome() {
+        if (this._chrome) {
+            try {
+                Main.layoutManager.removeChrome(this._capsule);
+            } catch {
+                const parent = this._capsule.get_parent();
+                parent?.remove_child(this._capsule);
+            }
+            this._chrome = false;
+            return;
+        }
+        const parent = this._capsule.get_parent();
+        parent?.remove_child(this._capsule);
     }
 
     _tryClickGesture(actor) {
@@ -67,9 +115,7 @@ export const Island = GObject.registerClass({
             const gesture = new Clutter.ClickGesture();
             if (gesture.set_recognize_on_press)
                 gesture.set_recognize_on_press(false);
-            gesture.connect('recognize', () => {
-                this.emit('primary-click');
-            });
+            gesture.connect('recognize', () => this.emit('primary-click'));
             actor.add_action(gesture);
             this._clickGesture = gesture;
         } catch {
@@ -91,24 +137,86 @@ export const Island = GObject.registerClass({
         return Clutter.EVENT_PROPAGATE;
     }
 
-    vfunc_event(event) {
-        const type = event.type();
-        if (type === Clutter.EventType.BUTTON_PRESS ||
-            type === Clutter.EventType.TOUCH_BEGIN) {
-            if (type === Clutter.EventType.BUTTON_PRESS)
-                return this._onPress(event);
-            if (!this._clickGesture)
-                this.emit('primary-click');
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
+    _onHover() {
+        const hover = this._capsule.hover;
+        this._capsule.ease({
+            scale_x: hover ? 1.03 : 1.0,
+            scale_y: hover ? 1.03 : 1.0,
+            duration: 160,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
+        if (hover)
+            this._capsule.add_style_class_name('is-hover');
+        else
+            this._capsule.remove_style_class_name('is-hover');
     }
 
-    setContent(actor) {
+    bounce() {
+        this._capsule.remove_all_transitions();
+        this._capsule.set_pivot_point(0.5, 0);
+        this._capsule.scale_x = 1;
+        this._capsule.scale_y = 1;
+        this._capsule.ease({
+            scale_x: 1.08,
+            scale_y: 1.08,
+            duration: 90,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => {
+                this._capsule.ease({
+                    scale_x: 1,
+                    scale_y: 1,
+                    duration: 240,
+                    mode: Clutter.AnimationMode.EASE_OUT_BACK,
+                });
+            },
+        });
+    }
+
+    setContent(actor, {fade = true} = {}) {
         const prev = this._content.get_child();
-        this._content.set_child(actor);
-        if (prev && prev !== actor)
-            prev.destroy();
+        if (!fade || !prev) {
+            this._content.set_child(actor);
+            if (prev && prev !== actor)
+                prev.destroy();
+            this._content.opacity = 255;
+            return Promise.resolve();
+        }
+
+        const gen = ++this._contentGen;
+        this._content.remove_all_transitions();
+        return new Promise(resolve => {
+            this._content.ease({
+                opacity: 0,
+                duration: 90,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onComplete: () => {
+                    if (this._content.get_child() !== actor) {
+                        this._content.set_child(actor);
+                        if (prev && prev !== actor)
+                            prev.destroy();
+                    }
+                    this._content.opacity = 0;
+                    this._content.ease({
+                        opacity: 255,
+                        duration: 180,
+                        mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                        onComplete: resolve,
+                        onStopped: resolve,
+                    });
+                },
+                onStopped: () => {
+                    if (gen !== this._contentGen) {
+                        resolve();
+                        return;
+                    }
+                    this._content.set_child(actor);
+                    if (prev && prev !== actor)
+                        prev.destroy();
+                    this._content.opacity = 255;
+                    resolve();
+                },
+            });
+        });
     }
 
     updateClock(text) {
@@ -121,41 +229,73 @@ export const Island = GObject.registerClass({
         return this._geom;
     }
 
-    async morphTo(geom, durationMs = 360) {
+    _topInset() {
+        const panelHeight = Main.panel?.height || 32;
+        const compact = Geometry.idle.height;
+        return Math.max(2, Math.round((panelHeight - compact) / 2));
+    }
+
+    _targetBox(geom) {
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return {x: 0, y: 0};
+        return {
+            x: monitor.x + Math.round((monitor.width - geom.width) / 2),
+            y: monitor.y + this._topInset(),
+        };
+    }
+
+    _applyRadius(radius) {
+        this._capsule.style = `border-radius: ${radius}px;`;
+    }
+
+    relayout(animate = false) {
+        const box = this._targetBox(this._geom);
+        if (animate) {
+            this.morphTo(this._geom);
+            return;
+        }
+        this._capsule.set_position(box.x, box.y);
+        this._capsule.set_size(this._geom.width, this._geom.height);
+        this._applyRadius(this._geom.radius);
+        this._spacer.width = Geometry.idle.width;
+    }
+
+    async morphTo(geom, durationMs = 420) {
         if (!geom)
             return;
-        if (sameGeometry(this._geom, geom) && !this._morphing)
+        if (sameGeometry(this._geom, geom) && !this._capsule.get_transition('width')) {
+            this.relayout(false);
             return;
+        }
 
         this._geom = {...geom};
-        const overlay = !!geom.overlay;
+        this._applyRadius(geom.radius ?? 17);
+        if (isExpandedGeometry(geom))
+            this._capsule.add_style_class_name('is-expanded');
+        else
+            this._capsule.remove_style_class_name('is-expanded');
 
-        if (overlay && !this._inOverlay)
-            this._lift();
-        else if (!overlay && this._inOverlay)
-            this._dock();
-
-        this._capsule.style = `border-radius: ${geom.radius ?? 14}px;`;
-
-        if (this._inOverlay)
-            this._positionOverlay();
-
+        const box = this._targetBox(geom);
         const props = {
+            x: box.x,
+            y: box.y,
             width: geom.width,
             height: geom.height,
             duration: durationMs,
-            mode: overlay
-                ? Clutter.AnimationMode.EASE_OUT_BACK
-                : Clutter.AnimationMode.EASE_OUT_CUBIC,
+            mode: Clutter.AnimationMode.EASE_OUT_BACK,
         };
 
-        this._morphing = true;
+        this._morphGen++;
+        const gen = this._morphGen;
+        this._capsule.remove_all_transitions();
+
         try {
             if (this._capsule.easeAsync) {
                 try {
                     await this._capsule.easeAsync(props);
                 } catch {
-                    // cancelled by a newer morph
+                    // superseded
                 }
             } else {
                 await new Promise(resolve => {
@@ -167,76 +307,17 @@ export const Island = GObject.registerClass({
                 });
             }
         } finally {
-            this._morphing = false;
-        }
-
-        if (this._inOverlay)
-            this._positionOverlay();
-    }
-
-    _lift() {
-        if (this._inOverlay)
-            return;
-
-        const parent = this._capsule.get_parent();
-        if (parent)
-            parent.remove_child(this._capsule);
-
-        if (!this._spacer) {
-            this._spacer = new St.Widget({
-                style_class: 'dynamic-island-spacer',
-                width: 128,
-                height: 1,
-                x_expand: false,
-            });
-            this.add_child(this._spacer);
-        }
-
-        Main.layoutManager.uiGroup.add_child(this._capsule);
-        this._capsule.add_style_class_name('dynamic-island-overlay');
-        this._inOverlay = true;
-        this._positionOverlay();
-    }
-
-    _dock() {
-        if (!this._inOverlay)
-            return;
-
-        const parent = this._capsule.get_parent();
-        if (parent)
-            parent.remove_child(this._capsule);
-
-        if (this._spacer) {
-            this.remove_child(this._spacer);
-            this._spacer.destroy();
-            this._spacer = null;
-        }
-
-        this._capsule.remove_style_class_name('dynamic-island-overlay');
-        this.add_child(this._capsule);
-        this._inOverlay = false;
-    }
-
-    _positionOverlay() {
-        const monitor = Main.layoutManager.primaryMonitor;
-        if (!monitor)
-            return;
-        const width = this._geom.width;
-        const x = monitor.x + Math.round((monitor.width - width) / 2);
-        const y = monitor.y + 6;
-        this._capsule.set_position(x, y);
-        try {
-            this._capsule.get_parent()?.set_child_above_sibling(this._capsule, null);
-        } catch {
-            // stacking not available
+            if (gen === this._morphGen)
+                this.relayout(false);
         }
     }
 
-    forceDock() {
-        this._dock();
-        this._geom = {width: 128, height: 28, overlay: false, radius: 14};
-        this._capsule.set_size(this._geom.width, this._geom.height);
-        this._capsule.style = `border-radius: ${this._geom.radius}px;`;
+    forceIdle() {
+        this._geom = {...Geometry.idle};
+        this._capsule.remove_style_class_name('is-expanded');
+        this._capsule.scale_x = 1;
+        this._capsule.scale_y = 1;
+        this.relayout(false);
     }
 
     destroy() {
@@ -244,7 +325,8 @@ export const Island = GObject.registerClass({
             Main.layoutManager.disconnect(this._monitorsId);
             this._monitorsId = 0;
         }
-        this._dock();
+        this._unmountChrome();
+        this._capsule.destroy();
         super.destroy();
     }
 });
