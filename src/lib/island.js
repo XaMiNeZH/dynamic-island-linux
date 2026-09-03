@@ -8,7 +8,13 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
-import {Geometry, isExpandedGeometry} from './constants.js';
+import {
+    Geometry,
+    compactHeightForPanel,
+    compactTopInset,
+    fitGeometryToPanel,
+    isExpandedGeometry,
+} from './constants.js';
 import {sameGeometry} from './motion.js';
 
 export const Island = GObject.registerClass({
@@ -70,6 +76,7 @@ export const Island = GObject.registerClass({
         this._tryClickGesture(this._capsule);
 
         this._mountChrome();
+        this._bindPanel();
         this.relayout(false);
 
         this._monitorsId = Main.layoutManager.connect('monitors-changed', () => this.relayout(false));
@@ -229,19 +236,111 @@ export const Island = GObject.registerClass({
         return this._geom;
     }
 
-    _topInset() {
-        const panelHeight = Main.panel?.height || 32;
-        const compact = Geometry.idle.height;
-        return Math.max(2, Math.round((panelHeight - compact) / 2));
+    _bindPanel() {
+        const box = Main.layoutManager.panelBox;
+        this._panelIds = [];
+        if (box) {
+            for (const prop of ['allocation', 'height', 'y', 'x']) {
+                try {
+                    this._panelIds.push(box.connect(`notify::${prop}`, () => this.relayout(false)));
+                } catch {
+                    // property not available on this Shell
+                }
+            }
+        }
+        try {
+            this._startupId = Main.layoutManager.connect('startup-complete', () => this.relayout(false));
+        } catch {
+            this._startupId = 0;
+        }
+    }
+
+    _unbindPanel() {
+        const box = Main.layoutManager.panelBox;
+        if (box && this._panelIds?.length) {
+            for (const id of this._panelIds) {
+                try {
+                    box.disconnect(id);
+                } catch {
+                    // already gone
+                }
+            }
+        }
+        this._panelIds = [];
+        if (this._startupId) {
+            try {
+                Main.layoutManager.disconnect(this._startupId);
+            } catch {
+                // already gone
+            }
+            this._startupId = 0;
+        }
+    }
+
+    _panelRect() {
+        const monitor = Main.layoutManager.primaryMonitor;
+        const panelBox = Main.layoutManager.panelBox;
+        const fallback = {
+            x: monitor?.x ?? 0,
+            y: monitor?.y ?? 0,
+            width: monitor?.width ?? 0,
+            height: Main.panel?.height || 32,
+        };
+
+        if (!panelBox)
+            return fallback;
+
+        let x = Number.isFinite(panelBox.x) ? panelBox.x : fallback.x;
+        let y = Number.isFinite(panelBox.y) ? panelBox.y : fallback.y;
+        let width = panelBox.width || fallback.width;
+        let height = panelBox.height || fallback.height;
+
+        try {
+            const pos = panelBox.get_transformed_position?.();
+            if (Array.isArray(pos) && pos.length >= 2 &&
+                Number.isFinite(pos[0]) && Number.isFinite(pos[1])) {
+                const parent = this._capsule?.get_parent();
+                const panelParent = panelBox.get_parent();
+                if (!parent || parent === panelParent) {
+                    x = panelBox.x;
+                    y = panelBox.y;
+                } else {
+                    x = pos[0];
+                    y = pos[1];
+                }
+            }
+        } catch {
+            // keep actor x/y
+        }
+
+        const panelHeight = Main.panel?.height;
+        if (panelHeight > 0)
+            height = panelHeight;
+        if (!(height > 0))
+            height = fallback.height;
+        if (!(width > 0))
+            width = fallback.width;
+
+        return {x, y, width, height};
+    }
+
+    fitGeometry(geom) {
+        return fitGeometryToPanel(geom, this._panelRect().height);
     }
 
     _targetBox(geom) {
+        const panel = this._panelRect();
         const monitor = Main.layoutManager.primaryMonitor;
-        if (!monitor)
-            return {x: 0, y: 0};
+        const resolved = this.fitGeometry(geom);
+        const compactHeight = resolved.compact === false
+            ? compactHeightForPanel(panel.height)
+            : resolved.height;
+        const inset = compactTopInset(panel.height, compactHeight);
+        const screenX = monitor?.x ?? panel.x;
+        const screenW = monitor?.width ?? panel.width;
         return {
-            x: monitor.x + Math.round((monitor.width - geom.width) / 2),
-            y: monitor.y + this._topInset(),
+            x: screenX + Math.round((screenW - resolved.width) / 2),
+            y: panel.y + inset,
         };
     }
 
@@ -250,6 +349,7 @@ export const Island = GObject.registerClass({
     }
 
     relayout(animate = false) {
+        this._geom = this.fitGeometry(this._geom);
         const box = this._targetBox(this._geom);
         if (animate) {
             this.morphTo(this._geom);
@@ -264,24 +364,25 @@ export const Island = GObject.registerClass({
     async morphTo(geom, durationMs = 420) {
         if (!geom)
             return;
-        if (sameGeometry(this._geom, geom) && !this._capsule.get_transition('width')) {
+        const resolved = this.fitGeometry(geom);
+        if (sameGeometry(this._geom, resolved) && !this._capsule.get_transition('width')) {
             this.relayout(false);
             return;
         }
 
-        this._geom = {...geom};
-        this._applyRadius(geom.radius ?? 17);
-        if (isExpandedGeometry(geom))
+        this._geom = {...resolved};
+        this._applyRadius(resolved.radius ?? 17);
+        if (isExpandedGeometry(resolved))
             this._capsule.add_style_class_name('is-expanded');
         else
             this._capsule.remove_style_class_name('is-expanded');
 
-        const box = this._targetBox(geom);
+        const box = this._targetBox(resolved);
         const props = {
             x: box.x,
             y: box.y,
-            width: geom.width,
-            height: geom.height,
+            width: resolved.width,
+            height: resolved.height,
             duration: durationMs,
             mode: Clutter.AnimationMode.EASE_OUT_BACK,
         };
@@ -313,7 +414,7 @@ export const Island = GObject.registerClass({
     }
 
     forceIdle() {
-        this._geom = {...Geometry.idle};
+        this._geom = this.fitGeometry(Geometry.idle);
         this._capsule.remove_style_class_name('is-expanded');
         this._capsule.scale_x = 1;
         this._capsule.scale_y = 1;
@@ -325,6 +426,7 @@ export const Island = GObject.registerClass({
             Main.layoutManager.disconnect(this._monitorsId);
             this._monitorsId = 0;
         }
+        this._unbindPanel();
         this._unmountChrome();
         this._capsule.destroy();
         super.destroy();

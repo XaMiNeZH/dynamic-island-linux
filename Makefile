@@ -13,6 +13,7 @@ test:
 	gjs --module tests/test-activity-stack.js
 	gjs --module tests/test-motion.js
 	gjs --module tests/test-clock-format.js
+	gjs --module tests/test-geometry.js
 
 check: schemas test
 	python3 -c "import json; json.load(open('$(SRC)/metadata.json'))"

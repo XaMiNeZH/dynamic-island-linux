@@ -68,7 +68,7 @@ export class Presenter {
             return;
 
         const key = activityKey(activity);
-        const geom = geometryFor(activity.kind, activity.expanded);
+        const geom = this._island.fitGeometry(geometryFor(activity.kind, activity.expanded));
 
         if (key === this._key && this._view?.update) {
             this._view.update(activity.payload, this._clock.text);
