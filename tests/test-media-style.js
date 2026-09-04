@@ -95,13 +95,14 @@ assert(capped === 120_000_000, 'clock stops at duration');
 
 assert(!playbackNeedsResync(10_000_000, 10_400_000), 'small drift does not resync');
 assert(playbackNeedsResync(10_000_000, 13_000_000), 'a seek resyncs the clock');
+assert(progressFillWidth(0, 320) === 0, 'seek fill starts at the left edge');
 assert(progressFillWidth(0.5, 320) === 160, 'seek fill uses allocated rail width');
 assert(progressFillWidth(0.125, 320) === 40, 'seek fill advances before playback ends');
 assert(progressFillWidth(1.4, 320) === 320, 'seek fill is capped at rail width');
 
-assert(Geometry.mediaExpanded.width === 520, 'expanded media matches the wide notch panel');
-assert(Geometry.mediaExpanded.height === 146, 'expanded media is 146 tall');
-assert(Geometry.mediaExpanded.radius === 36, 'expanded media keeps round corners');
+assert(Geometry.mediaExpanded.width === 344, 'expanded media has compact player width');
+assert(Geometry.mediaExpanded.height === 84, 'expanded media avoids an empty lower panel');
+assert(Geometry.mediaExpanded.radius === 22, 'expanded media has moderate round corners');
 assert(Geometry.mediaExpanded.radius < Geometry.mediaExpanded.height / 2,
     'expanded media is a rounded rect, not a stadium');
 

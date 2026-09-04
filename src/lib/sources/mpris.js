@@ -62,11 +62,17 @@ const PropertiesIface = `
       <arg type="s" direction="in" name="property_name"/>
       <arg type="v" direction="out" name="value"/>
     </method>
+    <method name="Set">
+      <arg type="s" direction="in" name="interface_name"/>
+      <arg type="s" direction="in" name="property_name"/>
+      <arg type="v" direction="in" name="value"/>
+    </method>
   </interface>
 </node>`;
 
 const SEEK_HOLD_US = 1_000_000;
 const VOLUME_HOLD_US = 400_000;
+const POSITION_REFRESH_MS = 250;
 
 const DBusProxy = Gio.DBusProxy.makeProxyWrapper(DBusIface);
 const AppProxy = Gio.DBusProxy.makeProxyWrapper(AppIface);
@@ -312,18 +318,28 @@ class Player {
 
     setVolume(level) {
         if (!this.hasVolume)
-            return;
+            return false;
         const value = Math.max(0, Math.min(1, Number(level)));
         if (!Number.isFinite(value))
-            return;
+            return false;
         this.volume = value;
         this._volumeHoldUntil = GLib.get_monotonic_time() + VOLUME_HOLD_US;
-        try {
-            this._proxy.Volume = value;
-        } catch {
-            // player rejected the write
-        }
         this._onChange?.(this);
+        if (!this._properties)
+            return false;
+
+        this._properties.SetAsync(
+            'org.mpris.MediaPlayer2.Player',
+            'Volume',
+            new GLib.Variant('d', value))
+            .catch(() => {
+                // Do not leave an optimistic glyph behind when a player
+                // advertises Volume but rejects writes.
+                this._volumeHoldUntil = 0;
+                this._readVolume();
+                this._onChange?.(this);
+            });
+        return true;
     }
 
     destroy() {
@@ -409,7 +425,7 @@ export class MprisSource {
 
     _ensurePositionTimer(active) {
         if (active && !this._posId) {
-            this._posId = this._tracker.timeoutAdd(500, () => {
+            this._posId = this._tracker.timeoutAdd(POSITION_REFRESH_MS, () => {
                 const player = this._active();
                 if (!player || !player.playing) {
                     this._publish();
@@ -462,6 +478,7 @@ export class MprisSource {
                 previous: () => player.previous(),
                 seek: frac => player.seekFraction(frac),
                 setVolume: level => volume.setVolume(level),
+                toggleMute: () => volume.toggleMute?.() ?? false,
             },
         });
     }

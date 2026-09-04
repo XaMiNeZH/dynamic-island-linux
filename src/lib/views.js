@@ -19,8 +19,6 @@ import {requestPalette} from './palette-load.js';
 import {FALLBACK_PALETTE, mixHex} from './palette.js';
 import {
     displayedPlaybackUs,
-    formatMediaClockUs,
-    formatMediaRemainingUs,
     playbackNeedsResync,
     progressFillWidth,
 } from './utils.js';
@@ -257,31 +255,37 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
         x_expand: true,
         y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
-        height: 12,
-        layout_manager: new Clutter.BinLayout(),
+        height: 8,
+        layout_manager: new Clutter.FixedLayout(),
     });
     const rail = new St.Widget({
         style_class: 'dynamic-island-seek-rail',
-        height: 6,
-        x_expand: true,
-        x_align: Clutter.ActorAlign.FILL,
-        y_align: Clutter.ActorAlign.CENTER,
+        height: 3,
+        x_expand: false,
     });
     const fill = new St.Widget({
         style_class: 'dynamic-island-seek-fill',
-        height: 6,
-        x_align: Clutter.ActorAlign.START,
-        y_align: Clutter.ActorAlign.CENTER,
-        width: Math.max(0, Math.round(pct * 148)),
+        height: 3,
+        x_expand: false,
+        width: 0,
     });
     track.add_child(rail);
     track.add_child(fill);
 
     let dragging = false;
+    let adjusted = false;
     let capturedId = 0;
     let last = pct;
 
-    const railWidth = () => Math.max(0, track.width || rail.width || 0);
+    const railWidth = () => {
+        const width = Math.max(0, track.width || 0);
+        const y = Math.max(0, Math.round((track.height - 3) / 2));
+        rail.set_position(0, y);
+        rail.set_size(width, 3);
+        fill.set_position(0, y);
+        fill.height = 3;
+        return width;
+    };
 
     const apply = (next, animate) => {
         const n = Math.max(0, Math.min(1, next ?? 0));
@@ -366,6 +370,7 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
     });
 
     track.connect('notify::width', () => apply(last, false));
+    track.connect('notify::height', () => apply(last, false));
     track.connect('destroy', () => {
         dragging = false;
         stopCapture();
@@ -799,6 +804,8 @@ function volumeOutput(payload, getPayload) {
     const finish = () => {
         dragging = false;
         stopCapture();
+        if (!adjusted)
+            getPayload()?.toggleMute?.();
     };
 
     const onCaptured = (_stage, event) => {
@@ -807,6 +814,7 @@ function volumeOutput(payload, getPayload) {
         const type = event.type();
         if (type === Clutter.EventType.MOTION || type === Clutter.EventType.TOUCH_UPDATE) {
             const dy = startY - eventY(event);
+            adjusted ||= Math.abs(dy) > 2;
             commit(startVol + dy / 140);
             return Clutter.EVENT_STOP;
         }
@@ -823,6 +831,7 @@ function volumeOutput(payload, getPayload) {
         if (!isPrimaryPress(event))
             return Clutter.EVENT_PROPAGATE;
         dragging = true;
+        adjusted = false;
         startY = eventY(event);
         startVol = level;
         stopCapture();
@@ -849,7 +858,7 @@ export function buildMediaExpanded(payload) {
         style_class: 'dynamic-island-art-glow',
         y_align: Clutter.ActorAlign.CENTER,
     });
-    const art = artClip(payload?.artUrl, 108, 14);
+    const art = artClip(payload?.artUrl, 52, 11);
     art.setMedia(payload);
     artGlow.set_child(art);
     root.add_child(artGlow);
@@ -857,7 +866,7 @@ export function buildMediaExpanded(payload) {
     const col = new St.BoxLayout({
         vertical: true,
         x_expand: true,
-        y_expand: true,
+        y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
         style_class: 'dynamic-island-media-copy',
     });
@@ -875,16 +884,16 @@ export function buildMediaExpanded(payload) {
         style_class: 'dynamic-island-text-col is-media',
     });
     const title = marqueeLabel(payload?.title || 'Not playing', 'dynamic-island-title', {
-        height: 18,
+        height: 16,
     });
     const artist = marqueeLabel(payload?.artist || '', 'dynamic-island-subtitle', {
-        height: 15,
+        height: 12,
     });
     textCol.add_child(title);
     textCol.add_child(artist);
     head.add_child(textCol);
 
-    const eq = equalizer(payload?.playing === true, {accent: true, height: 22});
+    const eq = equalizer(payload?.playing === true, {accent: true, height: 16});
     eq.y_align = Clutter.ActorAlign.START;
     head.add_child(eq);
     col.add_child(head);
@@ -907,26 +916,6 @@ export function buildMediaExpanded(payload) {
         x_expand: true,
         y_expand: false,
     });
-    const timeRow = new St.BoxLayout({
-        style_class: 'dynamic-island-seek-times',
-        x_expand: true,
-    });
-    const elapsed = label(formatMediaClockUs(positionUs), 'dynamic-island-seek-time');
-    const remaining = label(
-        formatMediaRemainingUs(positionUs, lengthUs),
-        'dynamic-island-seek-time is-remaining');
-    remaining.clutter_text.line_alignment = Pango.Alignment.RIGHT;
-    timeRow.add_child(elapsed);
-    timeRow.add_child(new St.Widget({x_expand: true, height: 1}));
-    timeRow.add_child(remaining);
-
-    const previewTimes = nextFrac => {
-        const length = root._payload?.lengthUs ?? 0;
-        const pos = length > 0 ? nextFrac * length : 0;
-        elapsed.text = formatMediaClockUs(pos);
-        remaining.text = formatMediaRemainingUs(pos, length);
-    };
-
     const seek = dragBar('dynamic-island-seek', frac, {
         onCommit: next => {
             const length = root._payload?.lengthUs ?? 0;
@@ -934,10 +923,8 @@ export function buildMediaExpanded(payload) {
             clock.anchorMonoUs = GLib.get_monotonic_time();
             root._payload?.seek?.(next);
         },
-        onPreview: previewTimes,
     });
     seekBlock.add_child(seek);
-    seekBlock.add_child(timeRow);
     col.add_child(seekBlock);
 
     const bottom = new St.BoxLayout({
@@ -948,7 +935,7 @@ export function buildMediaExpanded(payload) {
     });
     const leftSlot = new St.Widget({
         x_expand: true,
-        width: 28,
+        width: 24,
         height: 1,
         reactive: false,
     });
@@ -961,17 +948,17 @@ export function buildMediaExpanded(payload) {
         Glyph.prev,
         () => root._payload?.previous?.(),
         'is-transport-skip',
-        18);
+        14);
     const play = glyphButton(
         mediaPlayGlyph(payload?.playing === true),
         () => root._payload?.playPause?.(),
         'is-transport-play',
-        26);
+        16);
     const next = glyphButton(
         Glyph.next,
         () => root._payload?.next?.(),
         'is-transport-skip',
-        18);
+        14);
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
@@ -1006,8 +993,6 @@ export function buildMediaExpanded(payload) {
         const pos = displayedPlaybackUs(clock, GLib.get_monotonic_time());
         const length = clock.lengthUs;
         seek.setLevel(length > 0 ? pos / length : 0, false);
-        elapsed.text = formatMediaClockUs(pos);
-        remaining.text = formatMediaRemainingUs(pos, length);
     };
     const stopTick = () => {
         if (!tickId)

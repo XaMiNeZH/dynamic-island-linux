@@ -26,17 +26,26 @@ assert(outputVolumeRaw(1.5, 65536) === 65536, 'output volume never amplifies abo
 
 let desktopSet = null;
 let playerSet = null;
-const desktop = {available: true, volume: 0.7, setVolume: n => (desktopSet = n)};
+let desktopMuted = false;
+const desktop = {
+    available: true,
+    volume: 0.7,
+    setVolume: n => (desktopSet = n),
+    toggleMute: () => (desktopMuted = !desktopMuted),
+};
 const player = {hasVolume: true, volume: 0.2, setVolume: n => (playerSet = n)};
 const desktopControl = selectVolumeControl(desktop, player);
 assert(desktopControl.hasVolume && desktopControl.volume === 0.7,
     'desktop output wins over per-player MPRIS volume');
 desktopControl.setVolume(0.4);
 assert(desktopSet === 0.4 && playerSet === null, 'speaker writes GNOME output');
+desktopControl.toggleMute();
+assert(desktopMuted, 'speaker tap toggles GNOME output mute');
 
 const playerControl = selectVolumeControl(null, player);
 playerControl.setVolume(0.3);
 assert(playerControl.hasVolume && playerSet === 0.3, 'MPRIS remains a fallback');
+assert(playerControl.toggleMute === null, 'player fallback does not pretend to support mute');
 assert(!selectVolumeControl(null, null).hasVolume, 'no capability hides the control');
 
 print(`output-volume: ${passed} passed, ${failed} failed`);

@@ -25,6 +25,7 @@ export function selectVolumeControl(output, player) {
             hasVolume: true,
             volume: output.volume,
             setVolume: level => output.setVolume(level),
+            toggleMute: () => output.toggleMute?.() ?? false,
         };
     }
     if (player?.hasVolume) {
@@ -32,9 +33,10 @@ export function selectVolumeControl(output, player) {
             hasVolume: true,
             volume: player.volume,
             setVolume: level => player.setVolume(level),
+            toggleMute: null,
         };
     }
-    return {hasVolume: false, volume: null, setVolume: () => false};
+    return {hasVolume: false, volume: null, setVolume: () => false, toggleMute: null};
 }
 
 export class OutputVolume {
@@ -168,6 +170,25 @@ export class OutputVolume {
                 this._sink.volume = raw;
             this._sink.push_volume?.();
             this.volume = outputVolumeFraction(raw, this._maxVolume());
+            this._onChange?.();
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    toggleMute() {
+        if (!this.available || !this._sink)
+            return false;
+        try {
+            const muted = !this._streamMuted(this._sink);
+            if (this._sink.set_is_muted)
+                this._sink.set_is_muted(muted);
+            else
+                this._sink.is_muted = muted;
+            this._sink.push_volume?.();
+            const raw = this._streamVolume(this._sink);
+            this.volume = outputVolumeFraction(raw, this._maxVolume(), muted);
             this._onChange?.();
             return true;
         } catch {

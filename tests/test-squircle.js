@@ -42,9 +42,10 @@ assert(pointInChrome(44, 17, compact), 'compact stadium hit-test center');
 assert(!pointInChrome(0, 0, compact), 'compact stadium misses corner');
 
 const expanded = {...Geometry.mediaExpanded};
-assert(pointInChrome(260, 73, expanded), 'expanded round-rect hit-test center');
+assert(pointInChrome(expanded.width / 2, expanded.height / 2, expanded),
+    'expanded round-rect hit-test center');
 assert(!pointInChrome(0, 0, expanded), 'expanded round-rect misses corner');
-assert(pointInChrome(36, 0, expanded), 'expanded hit-test follows radius 36');
+assert(pointInChrome(expanded.radius, 0, expanded), 'expanded hit-test follows its radius');
 
 try {
     const cairo = (await import('gi://cairo')).default;
