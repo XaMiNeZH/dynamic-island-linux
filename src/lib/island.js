@@ -6,7 +6,6 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {
     COMPACT_PANEL_MARGIN,
@@ -19,21 +18,15 @@ import {
 import {sameGeometry} from './motion.js';
 
 export const Island = GObject.registerClass({
-    GTypeName: 'DynamicIslandChrome',
+    GTypeName: 'DynamicIslandOverlay',
     Signals: {
         'primary-click': {},
         'secondary-click': {},
     },
-}, class Island extends PanelMenu.Button {
+}, class Island extends GObject.Object {
     _init(extension) {
-        super._init(0.5, extension.gettext('Dynamic Island'), true);
+        super._init();
         this._extension = extension;
-        this.add_style_class_name('dynamic-island-button');
-        this.accessible_role = Atk.Role.PUSH_BUTTON;
-        this.accessible_name = extension.gettext('Dynamic Island');
-        this.reactive = false;
-        this.can_focus = false;
-        this.track_hover = false;
 
         this._geom = {...Geometry.idle};
         this._morphGen = 0;
@@ -42,14 +35,6 @@ export const Island = GObject.registerClass({
         this._settings = null;
         this._settingsIds = [];
         this._bindSettings();
-
-        this._spacer = new St.Widget({
-            style_class: 'dynamic-island-spacer',
-            width: Geometry.idle.width,
-            height: 1,
-            x_expand: false,
-        });
-        this.add_child(this._spacer);
 
         this._capsule = new St.Bin({
             style_class: 'dynamic-island-capsule',
@@ -61,6 +46,7 @@ export const Island = GObject.registerClass({
         });
         this._capsule.clip_to_allocation = true;
         this._capsule.set_pivot_point(0.5, 0);
+        this._capsule.accessible_role = Atk.Role.PUSH_BUTTON;
         this._capsule.accessible_name = extension.gettext('Dynamic Island');
         this._capsule.set_size(this._geom.width, this._geom.height);
         this._applyRadius(this._geom.radius);
@@ -77,13 +63,16 @@ export const Island = GObject.registerClass({
 
         this._capsule.connect('button-press-event', (_actor, event) => this._onPress(event));
         this._capsule.connect('notify::hover', () => this._onHover());
-        this._tryClickGesture(this._capsule);
 
         this._mountChrome();
         this._bindPanel();
         this.relayout(false);
 
         this._monitorsId = Main.layoutManager.connect('monitors-changed', () => this.relayout(false));
+    }
+
+    get hover() {
+        return !!this._capsule?.hover;
     }
 
     _mountChrome() {
@@ -119,30 +108,38 @@ export const Island = GObject.registerClass({
         parent?.remove_child(this._capsule);
     }
 
-    _tryClickGesture(actor) {
-        if (!Clutter.ClickGesture)
-            return;
+    _isControlTarget(event) {
+        let actor = null;
         try {
-            const gesture = new Clutter.ClickGesture();
-            if (gesture.set_recognize_on_press)
-                gesture.set_recognize_on_press(false);
-            gesture.connect('recognize', () => this.emit('primary-click'));
-            actor.add_action(gesture);
-            this._clickGesture = gesture;
+            actor = event.get_source?.() ?? null;
         } catch {
-            this._clickGesture = null;
+            actor = null;
         }
+        while (actor) {
+            if (actor instanceof St.Button)
+                return true;
+            if (actor.has_style_class_name?.('dynamic-island-icon-button'))
+                return true;
+            if (actor.has_style_class_name?.('dynamic-island-seek'))
+                return true;
+            if (actor === this._capsule)
+                break;
+            actor = actor.get_parent?.();
+        }
+        return false;
     }
 
     _onPress(event) {
+        if (this._isControlTarget(event))
+            return Clutter.EVENT_PROPAGATE;
+
         const button = event.get_button();
         if (button === Clutter.BUTTON_SECONDARY || button === 3) {
             this.emit('secondary-click');
             return Clutter.EVENT_STOP;
         }
         if (button === Clutter.BUTTON_PRIMARY || button === 1) {
-            if (!this._clickGesture)
-                this.emit('primary-click');
+            this.emit('primary-click');
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
@@ -160,6 +157,9 @@ export const Island = GObject.registerClass({
             this._capsule.add_style_class_name('is-hover');
         else
             this._capsule.remove_style_class_name('is-hover');
+
+        const child = this._content.get_child();
+        child?.setHover?.(hover);
     }
 
     bounce() {
@@ -190,6 +190,7 @@ export const Island = GObject.registerClass({
             if (prev && prev !== actor)
                 prev.destroy();
             this._content.opacity = 255;
+            actor?.setHover?.(this.hover);
             return Promise.resolve();
         }
 
@@ -206,6 +207,7 @@ export const Island = GObject.registerClass({
                         if (prev && prev !== actor)
                             prev.destroy();
                     }
+                    actor?.setHover?.(this.hover);
                     this._content.opacity = 0;
                     this._content.ease({
                         opacity: 255,
@@ -223,6 +225,7 @@ export const Island = GObject.registerClass({
                     this._content.set_child(actor);
                     if (prev && prev !== actor)
                         prev.destroy();
+                    actor?.setHover?.(this.hover);
                     this._content.opacity = 255;
                     resolve();
                 },
@@ -406,7 +409,6 @@ export const Island = GObject.registerClass({
         this._capsule.set_position(box.x, box.y);
         this._capsule.set_size(this._geom.width, this._geom.height);
         this._applyRadius(this._geom.radius);
-        this._spacer.width = Geometry.idle.width;
     }
 
     async morphTo(geom, durationMs = 420) {
@@ -478,6 +480,5 @@ export const Island = GObject.registerClass({
         this._unbindSettings();
         this._unmountChrome();
         this._capsule.destroy();
-        super.destroy();
     }
 });

@@ -72,6 +72,7 @@ export class Presenter {
 
         if (key === this._key && this._view?.update) {
             this._view.update(activity.payload, this._clock.text);
+            this._view.setHover?.(this._island.hover);
             this._island.morphTo(geom, this._duration()).catch(() => {});
             this._armExpiry();
             return;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 
 import {Kind} from '../activity-stack.js';
 import {SourceTracker} from '../utils.js';
@@ -21,14 +22,30 @@ const DBusIface = `
   </interface>
 </node>`;
 
+const AppIface = `
+<node>
+  <interface name="org.mpris.MediaPlayer2">
+    <property name="Identity" type="s" access="read"/>
+    <property name="DesktopEntry" type="s" access="read"/>
+  </interface>
+</node>`;
+
 const PlayerIface = `
 <node>
   <interface name="org.mpris.MediaPlayer2.Player">
     <method name="PlayPause"/>
     <method name="Next"/>
     <method name="Previous"/>
+    <method name="Seek">
+      <arg type="x" name="Offset" direction="in"/>
+    </method>
+    <method name="SetPosition">
+      <arg type="o" name="TrackId" direction="in"/>
+      <arg type="x" name="Position" direction="in"/>
+    </method>
     <property name="PlaybackStatus" type="s" access="read"/>
     <property name="Metadata" type="a{sv}" access="read"/>
+    <property name="Position" type="x" access="read"/>
     <property name="CanGoNext" type="b" access="read"/>
     <property name="CanGoPrevious" type="b" access="read"/>
     <property name="CanPlay" type="b" access="read"/>
@@ -36,6 +53,7 @@ const PlayerIface = `
 </node>`;
 
 const DBusProxy = Gio.DBusProxy.makeProxyWrapper(DBusIface);
+const AppProxy = Gio.DBusProxy.makeProxyWrapper(AppIface);
 const PlayerProxy = Gio.DBusProxy.makeProxyWrapper(PlayerIface);
 
 function unpackMetadata(raw) {
@@ -52,6 +70,25 @@ function unpackMetadata(raw) {
     return metadata;
 }
 
+function desktopIcon(desktopEntry) {
+    if (!desktopEntry)
+        return null;
+    const names = desktopEntry.endsWith('.desktop')
+        ? [desktopEntry]
+        : [`${desktopEntry}.desktop`, desktopEntry];
+    for (const name of names) {
+        try {
+            const info = Gio.DesktopAppInfo.new(name);
+            const icon = info?.get_icon?.();
+            if (icon)
+                return icon;
+        } catch {
+            // try the next candidate
+        }
+    }
+    return null;
+}
+
 class Player {
     constructor(busName, onChange, onGone) {
         this.busName = busName;
@@ -60,8 +97,14 @@ class Player {
         this.title = '';
         this.artist = '';
         this.artUrl = '';
+        this.identity = '';
+        this.iconName = 'audio-x-generic-symbolic';
+        this.gicon = null;
         this.status = 'Stopped';
         this.canPlay = false;
+        this.lengthUs = 0;
+        this.positionUs = 0;
+        this.trackId = '';
 
         this._proxy = new PlayerProxy(
             Gio.DBus.session,
@@ -74,6 +117,12 @@ class Player {
                 }
                 this._ready();
             });
+
+        this._app = new AppProxy(
+            Gio.DBus.session,
+            busName,
+            '/org/mpris/MediaPlayer2',
+            () => this._loadAppIcon());
     }
 
     _ready() {
@@ -89,16 +138,37 @@ class Player {
         this._update();
     }
 
+    _loadAppIcon() {
+        try {
+            this.identity = this._app?.Identity ?? '';
+            this.gicon = desktopIcon(this._app?.DesktopEntry);
+        } catch {
+            this.gicon = null;
+        }
+        this._onChange?.(this);
+    }
+
+    _readPosition() {
+        try {
+            this.positionUs = Number(this._proxy.Position ?? 0);
+        } catch {
+            this.positionUs = this.positionUs || 0;
+        }
+    }
+
     _update() {
         const metadata = unpackMetadata(this._proxy.Metadata);
         const artists = metadata['xesam:artist'];
         this.artist = Array.isArray(artists) ? artists.filter(a => typeof a === 'string').join(', ') : '';
         this.title = typeof metadata['xesam:title'] === 'string' ? metadata['xesam:title'] : '';
         this.artUrl = typeof metadata['mpris:artUrl'] === 'string' ? metadata['mpris:artUrl'] : '';
+        this.lengthUs = Number(metadata['mpris:length'] ?? 0) || 0;
+        this.trackId = typeof metadata['mpris:trackid'] === 'string' ? metadata['mpris:trackid'] : '';
         this.status = this._proxy.PlaybackStatus ?? 'Stopped';
         this.canPlay = !!this._proxy.CanPlay;
         this.canGoNext = !!this._proxy.CanGoNext;
         this.canGoPrevious = !!this._proxy.CanGoPrevious;
+        this._readPosition();
         this._onChange?.(this);
     }
 
@@ -118,12 +188,26 @@ class Player {
         this._proxy.PreviousAsync().catch(() => {});
     }
 
+    seekFraction(frac) {
+        if (!(this.lengthUs > 0))
+            return;
+        const pos = Math.round(Math.max(0, Math.min(1, frac)) * this.lengthUs);
+        const trackId = this.trackId || '/org/mpris/MediaPlayer2/TrackList/NoTrack';
+        this._proxy.SetPositionAsync(trackId, pos).catch(() => {
+            const delta = pos - (this.positionUs || 0);
+            this._proxy.SeekAsync(delta).catch(() => {});
+        });
+        this.positionUs = pos;
+        this._onChange?.(this);
+    }
+
     destroy() {
         if (this._propId)
             this._proxy.disconnect(this._propId);
         if (this._ownerId)
             this._proxy.disconnect(this._ownerId);
         this._proxy = null;
+        this._app = null;
     }
 }
 
@@ -196,30 +280,58 @@ export class MprisSource {
         return paused[paused.length - 1] ?? null;
     }
 
+    _ensurePositionTimer(active) {
+        if (active && !this._posId) {
+            this._posId = this._tracker.timeoutAdd(1000, () => {
+                const player = this._active();
+                if (!player || !player.playing) {
+                    this._publish();
+                    return GLib.SOURCE_CONTINUE;
+                }
+                player._readPosition();
+                this._publish();
+                return GLib.SOURCE_CONTINUE;
+            });
+            return;
+        }
+        if (!active && this._posId) {
+            this._tracker.timeoutRemove(this._posId);
+            this._posId = 0;
+        }
+    }
+
     _publish() {
         if (!this._settings.get_boolean('enable-media')) {
+            this._ensurePositionTimer(false);
             this._stack.remove('media');
             return;
         }
 
         const player = this._active();
         if (!player || (!player.playing && player.status !== 'Paused')) {
+            this._ensurePositionTimer(false);
             this._stack.remove('media');
             return;
         }
 
+        this._ensurePositionTimer(true);
         this._stack.upsert({
             id: 'media',
             kind: Kind.MEDIA,
             persistent: true,
             payload: {
-                title: player.title || player.busName.replace(MPRIS_PREFIX, ''),
+                title: player.title || player.identity || player.busName.replace(MPRIS_PREFIX, ''),
                 artist: player.artist,
                 artUrl: player.artUrl,
+                gicon: player.gicon,
+                iconName: player.iconName,
                 playing: player.playing,
+                lengthUs: player.lengthUs,
+                positionUs: player.positionUs,
                 playPause: () => player.playPause(),
                 next: () => player.next(),
                 previous: () => player.previous(),
+                seek: frac => player.seekFraction(frac),
             },
         });
     }

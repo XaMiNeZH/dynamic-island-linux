@@ -56,17 +56,22 @@ function artIcon(url, size = 22) {
             widget.icon_name = 'audio-x-generic-symbolic';
         }
     }
-    widget.setArt = nextUrl => {
-        if (nextUrl) {
+    widget.setArt = nextUrl => widget.setMedia({artUrl: nextUrl});
+    widget.setMedia = data => {
+        if (data?.artUrl) {
             try {
-                widget.gicon = new Gio.FileIcon({file: Gio.File.new_for_uri(nextUrl)});
+                widget.gicon = new Gio.FileIcon({file: Gio.File.new_for_uri(data.artUrl)});
                 return;
             } catch {
                 // fall through
             }
         }
+        if (data?.gicon) {
+            widget.gicon = data.gicon;
+            return;
+        }
         widget.gicon = null;
-        widget.icon_name = 'audio-x-generic-symbolic';
+        widget.icon_name = data?.iconName || 'audio-x-generic-symbolic';
     };
     return widget;
 }
@@ -83,7 +88,73 @@ function artClip(url, size) {
     const image = artIcon(url, size);
     clip.set_child(image);
     clip.setArt = next => image.setArt(next);
+    clip.setMedia = next => image.setMedia(next);
     return clip;
+}
+
+function formatClockUs(us) {
+    const sec = Math.max(0, Math.round((us ?? 0) / 1000000));
+    const minutes = Math.floor(sec / 60);
+    const seconds = sec % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function seekBar(fraction, onSeek) {
+    const pct = Math.max(0, Math.min(1, fraction ?? 0));
+    const track = new St.Widget({
+        style_class: 'dynamic-island-seek',
+        reactive: true,
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+        height: 16,
+    });
+    const rail = new St.Widget({
+        style_class: 'dynamic-island-level',
+        y_align: Clutter.ActorAlign.CENTER,
+        y_expand: false,
+        height: 4,
+        x_expand: true,
+    });
+    const fill = new St.Widget({
+        style_class: 'dynamic-island-level-fill',
+        height: 4,
+        width: Math.max(4, Math.round(pct * 148)),
+    });
+    rail.add_child(fill);
+    track.add_child(rail);
+
+    const apply = next => {
+        const n = Math.max(0, Math.min(1, next ?? 0));
+        const width = Math.max(4, Math.round(n * Math.max(track.width || 148, 80)));
+        fill.ease({
+            width,
+            duration: 120,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
+    };
+
+    track.connect('button-press-event', (_actor, event) => {
+        let x = 0;
+        try {
+            const coords = event.get_coords();
+            x = coords[coords.length - 2] ?? coords[0] ?? 0;
+        } catch {
+            return Clutter.EVENT_STOP;
+        }
+        let origin = 0;
+        try {
+            const pos = track.get_transformed_position();
+            origin = pos?.[0] ?? 0;
+        } catch {
+            origin = 0;
+        }
+        const width = Math.max(1, track.width || 1);
+        onSeek?.(Math.max(0, Math.min(1, (x - origin) / width)));
+        return Clutter.EVENT_STOP;
+    });
+
+    track.setLevel = apply;
+    return track;
 }
 
 function iconButton(iconName, callback, extraClass = '') {
@@ -206,7 +277,7 @@ function slot(child, side) {
     return bin;
 }
 
-function splitChrome({leading = null, trailing = null, clockText = ''}) {
+function splitChrome({leading = null, trailing = null}) {
     const root = new St.BoxLayout({
         style_class: 'dynamic-island-split',
         x_expand: true,
@@ -214,18 +285,13 @@ function splitChrome({leading = null, trailing = null, clockText = ''}) {
         y_align: Clutter.ActorAlign.CENTER,
     });
     const lead = slot(leading, 'leading');
-    const clock = label(clockText ?? '', 'dynamic-island-clock', true);
-    clock.x_align = Clutter.ActorAlign.CENTER;
+    const mid = new St.Widget({x_expand: true, height: 1});
     const trail = slot(trailing, 'trailing');
     root.add_child(lead);
-    root.add_child(clock);
+    root.add_child(mid);
     root.add_child(trail);
-    root.updateClock = text => {
-        clock.text = text ?? '';
-    };
     root.leading = lead;
     root.trailing = trail;
-    root.clock = clock;
     return root;
 }
 
@@ -247,29 +313,51 @@ function volumeIconName(level, kind) {
     return 'audio-volume-high-symbolic';
 }
 
-export function buildIdleView(clockText) {
-    const clock = label(clockText ?? '', 'dynamic-island-clock');
-    const box = new St.BoxLayout({
+export function buildIdleView() {
+    return new St.Widget({
         style_class: 'dynamic-island-idle',
         x_expand: true,
         y_expand: true,
-        x_align: Clutter.ActorAlign.CENTER,
-        y_align: Clutter.ActorAlign.CENTER,
     });
-    box.add_child(clock);
-    box.updateClock = text => {
-        clock.text = text ?? '';
-    };
-    return box;
 }
 
-export function buildMediaCompact(payload, clockText) {
+function mediaPlayIcon(playing) {
+    return playing
+        ? 'media-playback-pause-symbolic'
+        : 'media-playback-start-symbolic';
+}
+
+export function buildMediaCompact(payload) {
     const art = artClip(payload?.artUrl, 22);
-    const eq = equalizer(payload?.playing !== false);
-    const root = splitChrome({leading: art, trailing: eq, clockText});
+    art.setMedia(payload);
+    const eq = equalizer(payload?.playing === true);
+    const root = splitChrome({leading: art, trailing: eq});
+    root._payload = payload;
+    root._hover = false;
+
+    const play = iconButton(
+        mediaPlayIcon(payload?.playing === true),
+        () => root._payload?.playPause?.(),
+        'is-play is-compact-play');
+
+    const showTrailing = hover => {
+        const next = hover ? play : eq;
+        const prev = root.trailing.get_child();
+        if (prev === next)
+            return;
+        root.trailing.set_child(next);
+    };
+
+    root.setHover = hover => {
+        root._hover = !!hover;
+        showTrailing(root._hover);
+    };
     root.update = next => {
-        art.setArt(next?.artUrl);
-        eq.setPlaying(next?.playing !== false);
+        root._payload = next;
+        art.setMedia(next);
+        eq.setPlaying(next?.playing === true);
+        play.setIconName(mediaPlayIcon(next?.playing === true));
+        showTrailing(root._hover);
     };
     return root;
 }
@@ -288,6 +376,7 @@ export function buildMediaExpanded(payload) {
         x_expand: true,
     });
     const art = artClip(payload?.artUrl, 52);
+    art.setMedia(payload);
     top.add_child(art);
 
     const textCol = new St.BoxLayout({
@@ -303,14 +392,33 @@ export function buildMediaExpanded(payload) {
     top.add_child(textCol);
     root.add_child(top);
 
+    root._payload = payload;
+    const hasSeek = (payload?.lengthUs ?? 0) > 0;
+    let seek = null;
+    let elapsed = null;
+    let remaining = null;
+    if (hasSeek) {
+        const frac = (payload.positionUs ?? 0) / payload.lengthUs;
+        const row = new St.BoxLayout({
+            style_class: 'dynamic-island-seek-row',
+            x_expand: true,
+        });
+        elapsed = label(formatClockUs(payload.positionUs), 'dynamic-island-seek-time');
+        remaining = label(formatClockUs(payload.lengthUs), 'dynamic-island-seek-time');
+        seek = seekBar(frac, next => root._payload?.seek?.(next));
+        row.add_child(elapsed);
+        row.add_child(seek);
+        row.add_child(remaining);
+        root.add_child(row);
+    }
+
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
         x_align: Clutter.ActorAlign.CENTER,
     });
-    root._payload = payload;
     const prev = iconButton('media-skip-backward-symbolic', () => root._payload?.previous?.());
     const play = iconButton(
-        payload?.playing ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic',
+        mediaPlayIcon(payload?.playing === true),
         () => root._payload?.playPause?.(),
         'is-play');
     const next = iconButton('media-skip-forward-symbolic', () => root._payload?.next?.());
@@ -321,12 +429,17 @@ export function buildMediaExpanded(payload) {
 
     root.update = data => {
         root._payload = data;
-        art.setArt(data?.artUrl);
+        art.setMedia(data);
         title.text = data?.title || 'Not playing';
         artist.text = data?.artist || '';
-        play.setIconName(data?.playing
-            ? 'media-playback-pause-symbolic'
-            : 'media-playback-start-symbolic');
+        play.setIconName(mediaPlayIcon(data?.playing === true));
+        if (seek && (data?.lengthUs ?? 0) > 0) {
+            seek.setLevel((data.positionUs ?? 0) / data.lengthUs);
+            if (elapsed)
+                elapsed.text = formatClockUs(data.positionUs);
+            if (remaining)
+                remaining.text = formatClockUs(data.lengthUs);
+        }
     };
     return root;
 }
@@ -436,17 +549,15 @@ export function buildBluetoothView(payload) {
     return root;
 }
 
-export function buildPrivacyView(payload, clockText) {
+export function buildPrivacyView(payload) {
     const cam = payload?.camera
         ? icon('camera-web-symbolic', 14)
         : new St.Widget({width: 1, height: 1});
     const mic = payload?.mic
         ? icon('audio-input-microphone-symbolic', 14)
         : new St.Widget({width: 1, height: 1});
-    const root = splitChrome({leading: cam, trailing: mic, clockText});
-    root.update = (next, clock) => {
-        if (clock != null)
-            root.updateClock(clock);
+    const root = splitChrome({leading: cam, trailing: mic});
+    root.update = next => {
         root.leading.replace(next?.camera
             ? icon('camera-web-symbolic', 14)
             : new St.Widget({width: 1, height: 1}));
@@ -457,7 +568,7 @@ export function buildPrivacyView(payload, clockText) {
     return root;
 }
 
-export function buildRecordingView(payload, clockText, expanded) {
+export function buildRecordingView(payload, _clockText, expanded) {
     if (expanded) {
         let time = 'Recording';
         if (payload?.seconds != null) {
@@ -493,11 +604,9 @@ export function buildRecordingView(payload, clockText, expanded) {
         recText = `${minutes}:${String(seconds).padStart(2, '0')}`;
     }
     const rec = label(recText, 'dynamic-island-rec-time');
-    const root = splitChrome({leading: dot, trailing: rec, clockText});
+    const root = splitChrome({leading: dot, trailing: rec});
     root.add_style_class_name('dynamic-island-recording');
-    root.update = (next, clock) => {
-        if (clock != null)
-            root.updateClock(clock);
+    root.update = next => {
         if (next?.seconds != null) {
             const minutes = Math.floor(next.seconds / 60);
             const seconds = next.seconds % 60;
@@ -513,7 +622,7 @@ export function buildView(activity, clockText) {
     case Kind.MEDIA:
         return expanded
             ? buildMediaExpanded(payload)
-            : buildMediaCompact(payload, clockText);
+            : buildMediaCompact(payload);
     case Kind.NOTIFICATION:
         return buildNotificationView(payload);
     case Kind.VOLUME:
@@ -525,11 +634,11 @@ export function buildView(activity, clockText) {
     case Kind.BLUETOOTH:
         return buildBluetoothView(payload);
     case Kind.PRIVACY:
-        return buildPrivacyView(payload, clockText);
+        return buildPrivacyView(payload);
     case Kind.RECORDING:
         return buildRecordingView(payload, clockText, expanded);
     case Kind.IDLE:
     default:
-        return buildIdleView(clockText);
+        return buildIdleView();
     }
 }

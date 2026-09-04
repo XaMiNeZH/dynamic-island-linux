@@ -33,6 +33,9 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
         takeover.add(this._switch(settings, 'takeover-osd',
             _('Take over volume and brightness OSD'),
             _('Hide the stock overlay and morph the island instead.')));
+        takeover.add(this._switch(settings, 'hide-panel-media-controls',
+            _('Hide panel media-controls'),
+            _('Keep the GNOME date and time. Hide other MPRIS panel widgets so they do not sit behind the island.')));
         page.add(takeover);
 
         const motion = new Adw.PreferencesGroup({title: _('Motion')});
@@ -93,7 +96,7 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
         });
         const group = new Adw.PreferencesGroup({
             title: _('Idle pill'),
-            description: _('The island covers the GNOME clock. Right-click the pill to open the calendar.'),
+            description: _('The idle island is an empty notch. The panel clock stays in place. Right-click the pill to open the calendar.'),
         });
         group.add(this._switch(settings, 'show-seconds', _('Show seconds'), null));
 

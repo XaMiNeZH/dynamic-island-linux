@@ -1,6 +1,6 @@
 # Dynamic Island for Fedora GNOME
 
-A native Apple-style Dynamic Island for GNOME Shell. It replaces the top-center clock with a living pill that morphs for the current activity — notifications, media, volume, brightness, charging, Bluetooth, and privacy — then springs back.
+A native Apple-style Dynamic Island for GNOME Shell. It is a **standalone top-center overlay** — not the date menu and not a panel media widget — that morphs for the current activity: notifications, media, volume, brightness, charging, Bluetooth, and privacy.
 
 This is a **GNOME Shell extension**, not an Electron overlay and not a Hyprland layer-shell widget. Mutter has no `wlr-layer-shell`, so the only way the island can sit in the panel on Fedora Wayland is inside the Shell itself.
 
@@ -38,21 +38,23 @@ Uninstall:
 ./uninstall.sh
 ```
 
-Disable restores the GNOME clock, notification banners, and stock OSD.
+Disable restores notification banners, the stock OSD, and any panel media-controls widget the island hid. The GNOME date and time are never taken over.
 
 ## What it does
 
 | State | What you see |
 | --- | --- |
-| Idle | Top-center notch with the clock; tap for a bounce, right-click for calendar |
+| Idle | Small empty black notch; tap for a bounce, right-click for calendar |
 | Notification | Pill springs into a card; click opens the app |
-| Media | Album art and a live equalizer keep the clock in the middle; click expands transport |
+| Media (compact) | Album art (or the player icon) and sound waves |
+| Media (hover) | Same compact pill, play/pause instead of waves |
+| Media (expanded) | Click opens a now-playing card with skip, seek, and play/pause |
 | Volume / brightness / mute | Island takes over the GNOME OSD |
 | Charging | Percentage when you plug in |
 | Bluetooth | Device name on connect |
 | Recording / mic | Persistent compact activity while in use |
 
-Right-click the idle pill to open the GNOME calendar (the date menu is hidden, not deleted).
+The panel date/time stays where GNOME put it. Right-click the idle notch to open the calendar. Other MPRIS panel widgets (such as media-controls) are hidden by default so they do not sit behind the island.
 
 A later release can add a hybrid dashboard. v1 is Apple-faithful only: live activities and transients, no weather/notes hub.
 
@@ -61,9 +63,10 @@ A later release can add a hybrid dashboard. v1 is Apple-faithful only: live acti
 Open **Extensions → Dynamic Island → Settings** (or `gnome-extensions prefs dynamic-island@xaminezh.xyz`):
 
 - Banner and OSD takeover
+- Hide panel media-controls (date menu stays)
 - Per-source toggles
 - Morph duration and hold times
-- Clock format (follow GNOME, 12-hour, 24-hour)
+- Clock format (unused on the idle notch; kept for later)
 - Alignment: bar inset and a vertical nudge (live, no logout)
 
 ## Development
@@ -76,7 +79,9 @@ make zip      # pack dynamic-island@xaminezh.xyz.shell-extension.zip
 
 GJS caches extension modules for the life of the `gnome-shell` process. `disable` / `enable` re-runs `enable()` but does **not** pick up file edits. A nested window (`./tools/try.sh`) is a new process, so it loads the files you just installed.
 
-The Cloud Agent environment cannot run Mutter. Visual checks happen on a Fedora GNOME session. Headless tests cover the activity stack, motion math, geometry fit, and clock/OSD classification.
+After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + waves, hover shows play/pause, and click expands the card.
+
+The Cloud Agent environment cannot run Mutter. Visual checks happen on a Fedora GNOME session. Headless tests cover the activity stack, motion math, geometry fit, panel-media matching, and clock/OSD classification.
 
 ## Why not the other islands
 

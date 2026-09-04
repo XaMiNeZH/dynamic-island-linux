@@ -67,6 +67,15 @@ assert(fitGeometryToPanel(Geometry.idle, 32, {margin: 2}).height === 28,
 assert(fitGeometryToPanel(Geometry.idle, 32, {margin: 2}).radius === 14,
     'custom margin keeps a half-capsule radius');
 
+assert(Geometry.idle.width === 88, 'idle notch is a small empty pill');
+assert(geometryFor('idle').width === 88, 'idle geometry is the empty notch');
+assert(geometryFor('media', false).width === Geometry.compact.width, 'hover stays on compact geometry');
+assert(geometryFor('media', false).compact === true, 'compact media is not expanded');
+assert(geometryFor('media', true).compact === false, 'click expand uses expanded geometry');
+assert(geometryFor('media', false).width > geometryFor('idle').width, 'compact media is wider than idle');
+assert(geometryFor('media', true).height > geometryFor('media', false).height,
+    'expanded media is taller than compact');
+
 print(`geometry: ${passed} passed, ${failed} failed`);
 if (failed)
     throw new Error(`${failed} assertion(s) failed`);

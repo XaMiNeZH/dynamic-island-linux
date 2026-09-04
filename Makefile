@@ -14,6 +14,7 @@ test:
 	gjs --module tests/test-motion.js
 	gjs --module tests/test-clock-format.js
 	gjs --module tests/test-geometry.js
+	gjs --module tests/test-panel-media.js
 
 check: schemas test
 	python3 -c "import json; json.load(open('$(SRC)/metadata.json'))"

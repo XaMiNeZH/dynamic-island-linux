@@ -4,9 +4,9 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {ActivityStack} from './lib/activity-stack.js';
-import {ClockSource, setDateMenuVisible} from './lib/clock.js';
-import {ROLE} from './lib/constants.js';
+import {ClockSource} from './lib/clock.js';
 import {Island} from './lib/island.js';
+import {hidePanelMediaControls, restorePanelMediaControls} from './lib/panel-media.js';
 import {Presenter} from './lib/presenter.js';
 import {BatterySource} from './lib/sources/battery.js';
 import {BluetoothSource} from './lib/sources/bluetooth.js';
@@ -21,9 +21,7 @@ export default class DynamicIslandExtension extends Extension {
         this._stack = new ActivityStack();
         this._clock = new ClockSource(this._settings);
         this._island = new Island(this);
-
-        Main.panel.addToStatusArea(ROLE, this._island, 0, 'center');
-        setDateMenuVisible(Main, false);
+        this._hiddenMedia = [];
 
         this._presenter = new Presenter({
             island: this._island,
@@ -41,11 +39,22 @@ export default class DynamicIslandExtension extends Extension {
         this._addSource(() => new BluetoothSource({stack: this._stack, settings: this._settings}));
         this._addSource(() => new PrivacySource({stack: this._stack, settings: this._settings}));
 
+        this._syncPanelMedia();
+        this._mediaPrefId = this._settings.connect('changed::hide-panel-media-controls',
+            () => this._syncPanelMedia());
+
         this._sessionId = Main.sessionMode.connect('updated', () => {
-            setDateMenuVisible(Main, false);
             this._stack?.collapse();
             this._island?.relayout(false);
+            this._syncPanelMedia();
         });
+    }
+
+    _syncPanelMedia() {
+        restorePanelMediaControls(this._hiddenMedia);
+        this._hiddenMedia = [];
+        if (this._settings?.get_boolean('hide-panel-media-controls'))
+            this._hiddenMedia = hidePanelMediaControls(Main);
     }
 
     _addSource(factory) {
@@ -61,6 +70,13 @@ export default class DynamicIslandExtension extends Extension {
             Main.sessionMode.disconnect(this._sessionId);
             this._sessionId = 0;
         }
+        if (this._mediaPrefId && this._settings) {
+            this._settings.disconnect(this._mediaPrefId);
+            this._mediaPrefId = 0;
+        }
+
+        restorePanelMediaControls(this._hiddenMedia);
+        this._hiddenMedia = [];
 
         for (const source of this._sources ?? []) {
             try {
@@ -83,7 +99,6 @@ export default class DynamicIslandExtension extends Extension {
         this._stack?.clear();
         this._stack = null;
 
-        setDateMenuVisible(Main, true);
         if (Main.messageTray)
             Main.messageTray.bannerBlocked = false;
 

@@ -1,23 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
-#panel .panel-button.dynamic-island-button {
-    -natural-hpadding: 0;
-    -minimum-hpadding: 0;
-    background-color: transparent;
-    border: none;
-    box-shadow: none;
-    color: transparent;
-}
-
-#panel .panel-button.dynamic-island-button:hover,
-#panel .panel-button.dynamic-island-button:active,
-#panel .panel-button.dynamic-island-button:overview,
-#panel .panel-button.dynamic-island-button:focus,
-#panel .panel-button.dynamic-island-button:checked {
-    background-color: transparent;
-    box-shadow: none;
-}
-
 .dynamic-island-capsule {
     background-color: #000000;
     border-radius: 17px;
@@ -129,9 +111,31 @@
     background-color: #f2f2f2;
 }
 
+.dynamic-island-icon-button.is-compact-play {
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    padding: 2px;
+}
+
 .dynamic-island-controls {
     spacing: 14px;
-    padding-top: 10px;
+    padding-top: 8px;
+}
+
+.dynamic-island-seek-row {
+    spacing: 8px;
+    padding-top: 8px;
+}
+
+.dynamic-island-seek-time {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.55);
+    min-width: 28px;
+}
+
+.dynamic-island-seek {
+    min-width: 140px;
 }
 
 .dynamic-island-osd {

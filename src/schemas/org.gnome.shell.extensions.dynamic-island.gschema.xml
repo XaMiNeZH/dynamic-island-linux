@@ -72,5 +72,10 @@
       <summary>Extra vertical nudge</summary>
       <description>Move the island up (negative) or down (positive) relative to the panel. Applies immediately.</description>
     </key>
+    <key name="hide-panel-media-controls" type="b">
+      <default>true</default>
+      <summary>Hide panel media-controls widgets</summary>
+      <description>Hide other MPRIS panel indicators (such as media-controls) so they do not sit behind the island. The GNOME date menu is never hidden.</description>
+    </key>
   </schema>
 </schemalist>
