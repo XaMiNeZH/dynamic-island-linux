@@ -738,15 +738,20 @@ export function buildMediaExpanded(payload) {
     seekBlock.add_child(seek);
     root.add_child(seekBlock);
 
-    const bottom = new St.Widget({
+    const bottom = new St.BoxLayout({
         style_class: 'dynamic-island-media-bottom',
         x_expand: true,
         y_expand: false,
-        layout_manager: new Clutter.BinLayout(),
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const leftSlot = new St.Bin({
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+        width: 28,
     });
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
-        x_align: Clutter.ActorAlign.CENTER,
+        x_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
     });
     const prev = iconButton(
@@ -767,13 +772,23 @@ export function buildMediaExpanded(payload) {
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
-    bottom.add_child(controls);
 
     const volume = volumeOutput(payload, () => root._payload);
-    volume.x_align = Clutter.ActorAlign.END;
-    volume.y_align = Clutter.ActorAlign.CENTER;
-    volume.visible = payload?.hasVolume === true;
-    bottom.add_child(volume);
+    const showVolume = payload?.hasVolume === true;
+    volume.visible = showVolume;
+    volume.reactive = showVolume;
+    const rightSlot = new St.Bin({
+        x_expand: true,
+        x_fill: false,
+        x_align: Clutter.ActorAlign.END,
+        y_align: Clutter.ActorAlign.CENTER,
+        width: 28,
+    });
+    rightSlot.set_child(volume);
+
+    bottom.add_child(leftSlot);
+    bottom.add_child(controls);
+    bottom.add_child(rightSlot);
     root.add_child(bottom);
 
     root.update = data => {
@@ -789,9 +804,10 @@ export function buildMediaExpanded(payload) {
             elapsed.text = formatMediaClockUs(data?.positionUs);
             remaining.text = formatMediaRemainingUs(data?.positionUs, length);
         }
-        const showVolume = data?.hasVolume === true;
-        volume.visible = showVolume;
-        if (showVolume)
+        const on = data?.hasVolume === true;
+        volume.visible = on;
+        volume.reactive = on;
+        if (on)
             volume.setLevel(data.volume ?? 0);
     };
     return root;
