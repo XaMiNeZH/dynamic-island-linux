@@ -24,6 +24,7 @@ import {
     paintIslandChrome,
     pointInChrome,
 } from './squircle.js';
+import {isControlTarget} from './control-target.js';
 
 export const Island = GObject.registerClass({
     GTypeName: 'DynamicIslandOverlay',
@@ -190,39 +191,17 @@ export const Island = GObject.registerClass({
     }
 
     _isControlTarget(event) {
-        let actor = null;
-        try {
-            actor = event.get_source?.() ?? null;
-        } catch {
-            actor = null;
-        }
-        while (actor) {
-            if (actor instanceof St.Button)
-                return true;
-            if (actor.has_style_class_name?.('dynamic-island-icon-button'))
-                return true;
-            if (actor.has_style_class_name?.('is-compact-play'))
-                return true;
-            if (actor.has_style_class_name?.('dynamic-island-seek'))
-                return true;
-            if (actor.has_style_class_name?.('dynamic-island-volume'))
-                return true;
-            if (actor.has_style_class_name?.('is-output'))
-                return true;
-            if (actor.has_style_class_name?.('dynamic-island-slider'))
-                return true;
-            if (actor === this._capsule)
-                break;
-            actor = actor.get_parent?.();
-        }
-        return false;
+        return isControlTarget(event, this._capsule, actor => actor instanceof St.Button);
     }
 
     _onPress(event) {
-        if (!this._eventInChrome(event) && !this._isControlTarget(event))
+        const controlTarget = this._isControlTarget(event);
+        if (!this._eventInChrome(event) && !controlTarget)
             return Clutter.EVENT_PROPAGATE;
 
-        if (this._isControlTarget(event))
+        // Let the actual control consume its event; never turn it into an
+        // island-level primary click.
+        if (controlTarget)
             return Clutter.EVENT_PROPAGATE;
 
         const button = event.get_button();

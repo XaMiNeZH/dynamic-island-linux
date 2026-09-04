@@ -751,6 +751,7 @@ function eventY(event) {
 }
 
 function volumeOutput(payload, getPayload) {
+    const glyph = glyphActor(volumeGlyph(payload?.volume), 16);
     const button = new St.Button({
         style_class: 'dynamic-island-icon-button is-output dynamic-island-volume',
         reactive: true,
@@ -758,8 +759,12 @@ function volumeOutput(payload, getPayload) {
         track_hover: true,
         x_align: Clutter.ActorAlign.END,
         y_align: Clutter.ActorAlign.CENTER,
-        child: glyphActor(volumeGlyph(payload?.volume), 16),
+        child: glyph,
     });
+    // A press can originate on this DrawingArea rather than the St.Button.
+    // Mark both actors so Island can always defer to the volume control.
+    button._dynamicIslandControl = true;
+    glyph._dynamicIslandControl = true;
 
     let level = Math.max(0, Math.min(1, Number(payload?.volume) || 0));
     const setLevel = next => {
@@ -957,12 +962,6 @@ export function buildMediaExpanded(payload) {
         y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    const leftSlot = new St.Widget({
-        x_expand: true,
-        width: 24,
-        height: 1,
-        reactive: false,
-    });
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
         x_expand: false,
@@ -991,16 +990,22 @@ export function buildMediaExpanded(payload) {
     const showVolume = payload?.hasVolume === true;
     volume.visible = showVolume;
     volume.reactive = showVolume;
-    const rightSlot = new St.BoxLayout({
+    const leftSlot = new St.BoxLayout({
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    rightSlot.add_child(new St.Widget({
+    leftSlot.add_child(volume);
+    leftSlot.add_child(new St.Widget({
         x_expand: true,
         height: 1,
         reactive: false,
     }));
-    rightSlot.add_child(volume);
+    // Keep the trailing slot empty: this is a volume control, not AirPlay.
+    const rightSlot = new St.Widget({
+        x_expand: true,
+        height: 1,
+        reactive: false,
+    });
 
     bottom.add_child(leftSlot);
     bottom.add_child(controls);
