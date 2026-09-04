@@ -4,6 +4,7 @@
 import {
     FALLBACK_FAMILY,
     islandType,
+    listSystemFamilies,
     pickFamily,
     resolveIslandFonts,
     typeCss,
@@ -51,8 +52,13 @@ islandType.text = 'SF Pro Text';
 assert(typeStack('display').includes('"SF Pro Display"'), 'display stack quotes SF Pro Display');
 assert(typeCss('text').includes('"SF Pro Text"'), 'text CSS quotes SF Pro Text');
 assert(!typeCss('text').includes('SF Pro Display'), 'text optical size is not Display');
+assert(typeCss('text') === 'font-family: "SF Pro Text";',
+    'inline CSS targets the resolved text family without parser-dependent fallbacks');
 islandType.display = prev.display;
 islandType.text = prev.text;
+
+const discovered = listSystemFamilies();
+assert(discovered.length > 0, 'PangoCairo/fontconfig discovers installed families');
 
 print(`fonts: ${passed} passed, ${failed} failed`);
 if (failed)
