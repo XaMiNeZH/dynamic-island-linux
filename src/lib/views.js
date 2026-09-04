@@ -43,6 +43,20 @@ function iconFromGicon(gicon, fallback, size = 20) {
     return widget;
 }
 
+function cssUrl(uri) {
+    return `url("${String(uri).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`;
+}
+
+function fileUriFromGicon(gicon) {
+    try {
+        if (gicon instanceof Gio.FileIcon)
+            return gicon.get_file()?.get_uri?.() ?? '';
+    } catch {
+        // not a file icon
+    }
+    return '';
+}
+
 function artIcon(url, size = 22) {
     const widget = new St.Icon({
         icon_size: size,
@@ -78,6 +92,7 @@ function artIcon(url, size = 22) {
 }
 
 function artClip(url, size) {
+    const radius = Math.max(3, Math.round(size * 0.2));
     const clip = new St.Bin({
         style_class: 'dynamic-island-art-clip',
         width: size,
@@ -85,11 +100,39 @@ function artClip(url, size) {
         x_align: Clutter.ActorAlign.CENTER,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    clip.clip_to_allocation = true;
-    const image = artIcon(url, size);
-    clip.set_child(image);
-    clip.setArt = next => image.setArt(next);
-    clip.setMedia = next => image.setMedia(next);
+    clip.clip_to_allocation = false;
+    const fallback = artIcon(null, size);
+
+    const applyStyle = image => {
+        const imageCss = image
+            ? `background-image: ${cssUrl(image)}; background-size: cover; background-position: center;`
+            : 'background-image: none;';
+        clip.style = `border-radius: ${radius}px; ${imageCss}`;
+    };
+
+    const showFallback = data => {
+        applyStyle('');
+        fallback.setMedia(data ?? {iconName: 'audio-x-generic-symbolic'});
+        if (clip.get_child() !== fallback)
+            clip.set_child(fallback);
+    };
+
+    const paint = data => {
+        const artUrl = typeof data === 'string'
+            ? data
+            : (data?.artUrl || fileUriFromGicon(data?.gicon) || '');
+        if (artUrl) {
+            applyStyle(artUrl);
+            if (clip.get_child())
+                clip.set_child(null);
+            return;
+        }
+        showFallback(data);
+    };
+
+    clip.setArt = nextUrl => paint({artUrl: nextUrl});
+    clip.setMedia = next => paint(next);
+    paint({artUrl: url});
     return clip;
 }
 

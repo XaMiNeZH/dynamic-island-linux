@@ -105,13 +105,10 @@
 }
 
 .dynamic-island-art-clip {
-    border-radius: 14px;
-    background-color: transparent;
-}
-
-.dynamic-island-idle .dynamic-island-art-clip,
-.dynamic-island-split .dynamic-island-art-clip {
-    border-radius: 8px;
+    border-radius: 4px;
+    background-color: #111111;
+    background-size: cover;
+    background-position: center;
 }
 
 .dynamic-island-icon-button {
