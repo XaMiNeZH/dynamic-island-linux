@@ -2,6 +2,7 @@
 
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
@@ -15,7 +16,15 @@ import {
     fitGeometryToPanel,
     isExpandedGeometry,
 } from './constants.js';
-import {sameGeometry} from './motion.js';
+import {typeStack} from './fonts.js';
+import {sameGeometry, springProgress} from './motion.js';
+import {
+    chromeAllocation,
+    chromePad,
+    paintIslandChrome,
+    pointInChrome,
+} from './squircle.js';
+import {isControlTarget} from './control-target.js';
 
 export const Island = GObject.registerClass({
     GTypeName: 'DynamicIslandOverlay',
@@ -31,20 +40,24 @@ export const Island = GObject.registerClass({
         this._geom = {...Geometry.idle};
         this._morphGen = 0;
         this._contentGen = 0;
-        this._chrome = false;
+        this._chromeMounted = false;
+        this._morphTimer = 0;
         this._settings = null;
         this._settingsIds = [];
         this._bindSettings();
 
-        this._capsule = new St.Bin({
+        this._capsule = new St.Widget({
             style_class: 'dynamic-island-capsule',
             reactive: true,
             track_hover: true,
             can_focus: true,
             x_expand: false,
             y_expand: false,
+            layout_manager: new Clutter.FixedLayout(),
         });
-        this._capsule.clip_to_allocation = false;
+        // The chrome is painted separately, so clip the whole actor tree at
+        // the capsule allocation as well as at the content allocation.
+        this._capsule.clip_to_allocation = true;
         try {
             this._capsule.set_offscreen_redirect(Clutter.OffscreenRedirect.DISABLED);
         } catch {
@@ -53,19 +66,27 @@ export const Island = GObject.registerClass({
         this._capsule.set_pivot_point(0.5, 0);
         this._capsule.accessible_role = Atk.Role.PUSH_BUTTON;
         this._capsule.accessible_name = extension.gettext('Dynamic Island');
-        this._capsule.set_size(this._geom.width, this._geom.height);
-        this._applyRadius(this._geom.radius);
+
+        this._paint = new St.DrawingArea({
+            reactive: false,
+        });
+        this._paint.connect('repaint', area => this._onRepaint(area));
 
         this._content = new St.Bin({
             style_class: 'dynamic-island-content',
-            x_expand: true,
-            y_expand: true,
+            x_expand: false,
+            y_expand: false,
             x_align: Clutter.ActorAlign.FILL,
             y_align: Clutter.ActorAlign.FILL,
             opacity: 255,
         });
-        this._content.clip_to_allocation = false;
-        this._capsule.set_child(this._content);
+        this._content.clip_to_allocation = true;
+
+        this._capsule.add_child(this._paint);
+        this._capsule.add_child(this._content);
+
+        this._applyChromeStyle();
+        this._layoutActors();
 
         this._capsule.connect('button-press-event', (_actor, event) => this._onPress(event));
         this._capsule.connect('notify::hover', () => this._onHover());
@@ -81,16 +102,73 @@ export const Island = GObject.registerClass({
         return !!this._capsule?.hover;
     }
 
+    _applyChromeStyle() {
+        this._capsule.style =
+            `background-color: transparent; border-radius: 0; box-shadow: none; ` +
+            `font-family: ${typeStack('display')};`;
+    }
+
+    _onRepaint(area) {
+        const cr = area.get_context();
+        try {
+            if (area.width > 0 && area.height > 0)
+                paintIslandChrome(cr, area.width, area.height, this._geom);
+        } finally {
+            cr.$dispose?.();
+        }
+    }
+
+    _layoutActors() {
+        const alloc = chromeAllocation(this._geom);
+        this._capsule.set_size(alloc.width, alloc.height);
+        this._paint.set_position(0, 0);
+        this._paint.set_size(alloc.width, alloc.height);
+        this._content.set_position(alloc.pad, alloc.pad);
+        this._content.set_size(this._geom.width, this._geom.height);
+        const innerRadius = this._geom.compact === false
+            ? Math.max(22, Math.round((this._geom.radius ?? 36) * 0.9))
+            : Math.round(this._geom.height / 2);
+        this._content.style = `border-radius: ${innerRadius}px;`;
+        this._paint.queue_repaint();
+        if (isExpandedGeometry(this._geom))
+            this._capsule.add_style_class_name('is-expanded');
+        else
+            this._capsule.remove_style_class_name('is-expanded');
+    }
+
+    _eventInChrome(event) {
+        let sx = 0;
+        let sy = 0;
+        try {
+            const coords = event.get_coords();
+            sx = coords[coords.length - 2] ?? coords[0] ?? 0;
+            sy = coords[coords.length - 1] ?? coords[1] ?? 0;
+        } catch {
+            return true;
+        }
+        try {
+            const mapped = this._capsule.transform_stage_point(sx, sy);
+            const ok = mapped?.[0];
+            const x = typeof ok === 'boolean' ? mapped[1] : mapped?.[0];
+            const y = typeof ok === 'boolean' ? mapped[2] : mapped?.[1];
+            if (ok === false)
+                return false;
+            return pointInChrome(x, y, this._geom, chromePad(this._geom));
+        } catch {
+            return true;
+        }
+    }
+
     _mountChrome() {
         try {
             Main.layoutManager.addChrome(this._capsule, {
                 affectsInputRegion: true,
                 affectsStruts: false,
             });
-            this._chrome = true;
+            this._chromeMounted = true;
         } catch {
             Main.layoutManager.uiGroup.add_child(this._capsule);
-            this._chrome = false;
+            this._chromeMounted = false;
         }
         try {
             this._capsule.get_parent()?.set_child_above_sibling(this._capsule, null);
@@ -100,14 +178,14 @@ export const Island = GObject.registerClass({
     }
 
     _unmountChrome() {
-        if (this._chrome) {
+        if (this._chromeMounted) {
             try {
                 Main.layoutManager.removeChrome(this._capsule);
             } catch {
                 const parent = this._capsule.get_parent();
                 parent?.remove_child(this._capsule);
             }
-            this._chrome = false;
+            this._chromeMounted = false;
             return;
         }
         const parent = this._capsule.get_parent();
@@ -115,36 +193,17 @@ export const Island = GObject.registerClass({
     }
 
     _isControlTarget(event) {
-        let actor = null;
-        try {
-            actor = event.get_source?.() ?? null;
-        } catch {
-            actor = null;
-        }
-        while (actor) {
-            if (actor instanceof St.Button)
-                return true;
-            if (actor.has_style_class_name?.('dynamic-island-icon-button'))
-                return true;
-            if (actor.has_style_class_name?.('is-compact-play'))
-                return true;
-            if (actor.has_style_class_name?.('dynamic-island-seek'))
-                return true;
-            if (actor.has_style_class_name?.('dynamic-island-volume'))
-                return true;
-            if (actor.has_style_class_name?.('is-output'))
-                return true;
-            if (actor.has_style_class_name?.('dynamic-island-slider'))
-                return true;
-            if (actor === this._capsule)
-                break;
-            actor = actor.get_parent?.();
-        }
-        return false;
+        return isControlTarget(event, this._capsule, actor => actor instanceof St.Button);
     }
 
     _onPress(event) {
-        if (this._isControlTarget(event))
+        const controlTarget = this._isControlTarget(event);
+        if (!this._eventInChrome(event) && !controlTarget)
+            return Clutter.EVENT_PROPAGATE;
+
+        // Let the actual control consume its event; never turn it into an
+        // island-level primary click.
+        if (controlTarget)
             return Clutter.EVENT_PROPAGATE;
 
         const button = event.get_button();
@@ -195,15 +254,38 @@ export const Island = GObject.registerClass({
                 this._capsule.ease({
                     scale_x: 1,
                     scale_y: 1,
-                    duration: 240,
-                    mode: Clutter.AnimationMode.EASE_OUT_BACK,
+                    duration: 280,
+                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
                 });
             },
         });
     }
 
-    setContent(actor, {fade = true} = {}) {
+    _revealContent() {
+        this._content.remove_all_transitions();
+        if (this._content.opacity >= 250)
+            return;
+        this._content.ease({
+            opacity: 255,
+            duration: 160,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
+    }
+
+    setContent(actor, {fade = true, delayReveal = false} = {}) {
         const prev = this._content.get_child();
+        this._contentGen++;
+
+        if (delayReveal) {
+            this._content.remove_all_transitions();
+            this._content.set_child(actor);
+            if (prev && prev !== actor)
+                prev.destroy();
+            this._content.opacity = 0;
+            actor?.setHover?.(this.hover);
+            return Promise.resolve();
+        }
+
         if (!fade || !prev) {
             this._content.set_child(actor);
             if (prev && prev !== actor)
@@ -213,7 +295,7 @@ export const Island = GObject.registerClass({
             return Promise.resolve();
         }
 
-        const gen = ++this._contentGen;
+        const gen = this._contentGen;
         this._content.remove_all_transitions();
         return new Promise(resolve => {
             this._content.ease({
@@ -364,8 +446,7 @@ export const Island = GObject.registerClass({
 
         try {
             const pos = panelBox.get_transformed_position?.();
-            if (Array.isArray(pos) && pos.length >= 2 &&
-                Number.isFinite(pos[0]) && Number.isFinite(pos[1])) {
+            if (Array.isArray(pos) && Number.isFinite(pos[0]) && Number.isFinite(pos[1])) {
                 const parent = this._capsule?.get_parent();
                 const panelParent = panelBox.get_parent();
                 if (!parent || parent === panelParent) {
@@ -408,14 +489,11 @@ export const Island = GObject.registerClass({
         const inset = compactTopInset(panel.height, compactHeight);
         const screenX = monitor?.x ?? panel.x;
         const screenW = monitor?.width ?? panel.width;
+        const pad = chromePad(resolved);
         return {
-            x: screenX + Math.round((screenW - resolved.width) / 2),
-            y: panel.y + inset + offset,
+            x: screenX + Math.round((screenW - resolved.width) / 2) - pad,
+            y: panel.y + inset + offset - Math.min(pad, 4),
         };
-    }
-
-    _applyRadius(radius) {
-        this._capsule.style = `border-radius: ${Math.max(0, radius)}px; box-shadow: none;`;
     }
 
     relayout(animate = false) {
@@ -425,64 +503,94 @@ export const Island = GObject.registerClass({
             this.morphTo(this._geom);
             return;
         }
+        this._stopMorph();
+        this._applyChromeStyle();
         this._capsule.set_position(box.x, box.y);
-        this._capsule.set_size(this._geom.width, this._geom.height);
-        this._applyRadius(this._geom.radius);
+        this._layoutActors();
+        this._content.opacity = 255;
+    }
+
+    _stopMorph() {
+        if (this._morphTimer) {
+            GLib.source_remove(this._morphTimer);
+            this._morphTimer = 0;
+        }
+        this._capsule.remove_all_transitions();
     }
 
     async morphTo(geom, durationMs = 420) {
         if (!geom)
             return;
         const resolved = this.fitGeometry(geom);
-        if (sameGeometry(this._geom, resolved) && !this._capsule.get_transition('width')) {
+        if (sameGeometry(this._geom, resolved) && !this._morphTimer) {
             this.relayout(false);
             return;
         }
 
-        this._geom = {...resolved};
-        this._applyRadius(resolved.radius ?? 17);
-        if (isExpandedGeometry(resolved))
-            this._capsule.add_style_class_name('is-expanded');
-        else
-            this._capsule.remove_style_class_name('is-expanded');
-
-        const box = this._targetBox(resolved);
-        const props = {
-            x: box.x,
-            y: box.y,
-            width: resolved.width,
-            height: resolved.height,
-            duration: durationMs,
-            mode: Clutter.AnimationMode.EASE_OUT_BACK,
-        };
+        const fromGeom = {...this._geom};
+        const fromBox = this._targetBox(fromGeom);
+        const toBox = this._targetBox(resolved);
+        const duration = Math.max(220, durationMs);
 
         this._morphGen++;
         const gen = this._morphGen;
-        this._capsule.remove_all_transitions();
+        this._stopMorph();
+        this._geom = {...resolved};
+        this._applyChromeStyle();
 
-        try {
-            if (this._capsule.easeAsync) {
-                try {
-                    await this._capsule.easeAsync(props);
-                } catch {
-                    // superseded
+        const start = GLib.get_monotonic_time();
+        let revealed = this._content.opacity >= 250;
+
+        await new Promise(resolve => {
+            const tick = () => {
+                if (gen !== this._morphGen) {
+                    resolve();
+                    return GLib.SOURCE_REMOVE;
                 }
-            } else {
-                await new Promise(resolve => {
-                    this._capsule.ease({
-                        ...props,
-                        onComplete: resolve,
-                        onStopped: resolve,
-                    });
-                });
-            }
-        } finally {
-            if (gen === this._morphGen)
-                this.relayout(false);
+                const elapsed = (GLib.get_monotonic_time() - start) / 1000;
+                const t = elapsed / duration;
+                const k = springProgress(Math.min(t, 2.4));
+                const lerp = (a, b) => a + (b - a) * k;
+                this._geom = {
+                    ...resolved,
+                    width: lerp(fromGeom.width, resolved.width),
+                    height: lerp(fromGeom.height, resolved.height),
+                    radius: lerp(fromGeom.radius ?? 17, resolved.radius ?? 17),
+                    compact: resolved.compact,
+                };
+                this._capsule.set_position(
+                    Math.round(lerp(fromBox.x, toBox.x)),
+                    Math.round(lerp(fromBox.y, toBox.y)));
+                this._layoutActors();
+
+                if (!revealed && k >= 0.8) {
+                    revealed = true;
+                    this._revealContent();
+                }
+
+                if (k >= 0.995 || t >= 1.35) {
+                    this._morphTimer = 0;
+                    this._geom = {...resolved};
+                    this._capsule.set_position(toBox.x, toBox.y);
+                    this._layoutActors();
+                    this._revealContent();
+                    resolve();
+                    return GLib.SOURCE_REMOVE;
+                }
+                return GLib.SOURCE_CONTINUE;
+            };
+            this._morphTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, tick);
+        });
+
+        if (gen === this._morphGen) {
+            this._geom = {...resolved};
+            this._capsule.set_position(toBox.x, toBox.y);
+            this._layoutActors();
         }
     }
 
     forceIdle() {
+        this._stopMorph();
         this._geom = this.fitGeometry(Geometry.idle);
         this._capsule.remove_style_class_name('is-expanded');
         this._capsule.scale_x = 1;
@@ -491,6 +599,7 @@ export const Island = GObject.registerClass({
     }
 
     destroy() {
+        this._stopMorph();
         if (this._monitorsId) {
             Main.layoutManager.disconnect(this._monitorsId);
             this._monitorsId = 0;

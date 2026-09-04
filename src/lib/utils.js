@@ -130,6 +130,12 @@ export function playbackNeedsResync(displayedUs, reportedUs, slackUs = 1_200_000
     return Math.abs(Number(displayedUs) - Number(reportedUs)) > slackUs;
 }
 
+/** Convert a normalized media position into the actual allocated rail width. */
+export function progressFillWidth(fraction, trackWidth) {
+    const pct = Math.max(0, Math.min(1, Number(fraction) || 0));
+    return Math.round(pct * Math.max(0, Number(trackWidth) || 0));
+}
+
 export function formatClock(dateTime, {use24h, showSeconds}) {
     if (use24h) {
         return showSeconds

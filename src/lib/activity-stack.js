@@ -11,7 +11,6 @@ export const Kind = Object.freeze({
     VOLUME: 'volume',
     BRIGHTNESS: 'brightness',
     MUTE: 'mute',
-    NOTIFICATION: 'notification',
 });
 
 export const Priority = Object.freeze({
@@ -24,7 +23,6 @@ export const Priority = Object.freeze({
     [Kind.VOLUME]: 70,
     [Kind.BRIGHTNESS]: 70,
     [Kind.MUTE]: 70,
-    [Kind.NOTIFICATION]: 80,
 });
 
 function idleItem() {

@@ -1,6 +1,6 @@
 # Dynamic Island for Fedora GNOME
 
-A native Apple-style Dynamic Island for GNOME Shell. It is a **standalone top-center overlay** — not the date menu and not a panel media widget — that morphs for the current activity: notifications, media, volume, brightness, charging, Bluetooth, and privacy.
+A native Apple-style Dynamic Island for GNOME Shell. It is a **standalone top-center overlay** — not the date menu and not a panel media widget — that morphs for media, volume, brightness, charging, Bluetooth, and privacy. Notifications stay in GNOME's native banners.
 
 This is a **GNOME Shell extension**, not an Electron overlay and not a Hyprland layer-shell widget. Mutter has no `wlr-layer-shell`, so the only way the island can sit in the panel on Fedora Wayland is inside the Shell itself.
 
@@ -38,18 +38,17 @@ Uninstall:
 ./uninstall.sh
 ```
 
-Disable restores notification banners, the stock OSD, and any panel media-controls widget the island hid. The GNOME date and time are never taken over.
+Notifications always use GNOME's native banners. Disabling the extension restores the stock OSD and any panel media-controls widget the island hid. The GNOME date and time are never taken over.
 
 ## What it does
 
 | State | What you see |
 | --- | --- |
 | Idle | Small empty black notch; tap for a bounce, right-click for calendar |
-| Notification | Pill springs into a card; click opens the app |
 | Media (compact) | Album art (or the player icon) and sound waves |
-| Media (hover) | Same compact pill, small symbolic play/pause that actually toggles |
-| Media (expanded) | Click opens a wide now-playing panel: large album art, marquee title/artist, art-tinted waveform, capsule scrubber, transport, volume on the right |
-| Volume / brightness / mute | Island takes over the GNOME OSD |
+| Media (hover) | Same compact pill, small filled play/pause that actually toggles |
+| Media (expanded) | Click opens a 344×84 now-playing panel: album art, clipped marquee title/artist, art-tinted waveform, inline seek times, capsule scrubber, and transport controls |
+| Volume / brightness / mute | Thick-capsule HUD in the island (not the stock GNOME OSD) |
 | Charging | Percentage when you plug in |
 | Bluetooth | Device name on connect |
 | Recording / mic | Persistent compact activity while in use |
@@ -64,9 +63,9 @@ Compact and expanded media tint the six-bar waveform from album art. Bars grow f
 
 Open **Extensions → Dynamic Island → Settings** (or `gnome-extensions prefs dynamic-island@xaminezh.xyz`):
 
-- Banner and OSD takeover
+- OSD takeover (notifications stay native)
 - Hide panel media-controls (date menu stays)
-- Per-source toggles
+- Per-activity toggles
 - Morph duration and hold times
 - Clock format (unused on the idle notch; kept for later)
 - Alignment: bar inset and a vertical nudge (live, no logout)
@@ -81,9 +80,15 @@ make zip      # pack dynamic-island@xaminezh.xyz.shell-extension.zip
 
 GJS caches extension modules for the life of the `gnome-shell` process. `disable` / `enable` re-runs `enable()` but does **not** pick up file edits. A nested window (`./tools/try.sh`) is a new process, so it loads the files you just installed.
 
-After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + a 6-bar waveform, hover pause is small and toggles playback, and clicking the empty pill expands a **wide** now-playing panel with large rounded art on the left, title/artist, waves in the top-right, a capsule seek bar with times underneath, centered transport, and a speaker on the right (no bottom volume slider).
+After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, native notification banners appear normally, compact media is art + a 6-bar waveform, hover pause is a **filled** mark that toggles playback, and clicking the media pill expands a 344×84 **rounded rectangle** (22px corners) with album art, clipped marquee text, inline seek times, a live capsule seek rail, and filled transport controls. No square shadow or halo may appear around the pill.
 
-Typography uses **SF Pro** if you have it installed, otherwise the bundled **Inter** font (SIL OFL). Optional system package: `sudo dnf install google-inter-fonts`.
+Typography uses **SF Pro Display** (titles) and **SF Pro Text** (times, HUD, artist) when fontconfig can see them, otherwise bundled **Inter**. Check the names your copy registered:
+
+```bash
+fc-list : family | grep -i 'sf pro'
+```
+
+Then open a **new** nested Shell (`./tools/try.sh`). `disable` / `enable` will not pick up a newly installed font in the current process. Optional system fallback: `sudo dnf install google-inter-fonts`.
 
 The Cloud Agent environment cannot run Mutter. Visual checks happen on a Fedora GNOME session. Headless tests cover the activity stack, motion math, geometry fit, panel-media matching, and clock/OSD classification.
 

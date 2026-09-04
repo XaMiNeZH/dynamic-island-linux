@@ -7,6 +7,13 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {Kind} from './activity-stack.js';
+import {typeCss} from './fonts.js';
+import {
+    Glyph,
+    mediaPlayGlyph,
+    osdGlyph,
+    paintGlyph,
+} from './glyphs.js';
 import {requestPalette} from './palette-load.js';
 import {FALLBACK_PALETTE, mixHex} from './palette.js';
 import {
@@ -14,6 +21,7 @@ import {
     formatMediaClockUs,
     formatMediaRemainingUs,
     playbackNeedsResync,
+    progressFillWidth,
 } from './utils.js';
 import {
     BAR_COUNT,
@@ -32,29 +40,53 @@ function label(text, styleClass, expand = false) {
     });
     widget.clutter_text.ellipsize = Pango.EllipsizeMode.END;
     widget.clutter_text.single_line_mode = true;
+    const optical = /subtitle|seek-time|osd-label|rec-time/.test(styleClass ?? '')
+        ? 'text'
+        : 'display';
+    widget.style = typeCss(optical);
     return widget;
 }
 
-function icon(name, size = 16) {
-    return new St.Icon({
-        icon_name: name || 'dialog-information-symbolic',
-        icon_size: size,
-        style_class: 'dynamic-island-icon',
+function glyphActor(kind, size = 16) {
+    const area = new St.DrawingArea({
+        width: size,
+        height: size,
+        style_class: 'dynamic-island-glyph',
         y_align: Clutter.ActorAlign.CENTER,
+        x_align: Clutter.ActorAlign.CENTER,
     });
+    area._glyph = kind;
+    area._glyphSize = size;
+    area.connect('repaint', a => {
+        const cr = a.get_context();
+        try {
+            paintGlyph(cr, a._glyph, a._glyphSize);
+        } finally {
+            cr.$dispose?.();
+        }
+    });
+    area.setGlyph = next => {
+        area._glyph = next;
+        area.queue_repaint();
+    };
+    return area;
 }
 
-function iconFromGicon(gicon, fallback, size = 20) {
-    const widget = new St.Icon({
-        icon_size: size,
-        style_class: 'dynamic-island-icon',
-        y_align: Clutter.ActorAlign.CENTER,
+function glyphButton(kind, callback, extraClass = '', iconSize = 16) {
+    const area = glyphActor(kind, iconSize);
+    const button = new St.Button({
+        style_class: `dynamic-island-icon-button ${extraClass}`.trim(),
+        reactive: true,
+        can_focus: true,
+        track_hover: true,
+        child: area,
     });
-    if (gicon)
-        widget.gicon = gicon;
-    else
-        widget.icon_name = fallback;
-    return widget;
+    button.connect('button-press-event', () => {
+        callback();
+        return Clutter.EVENT_STOP;
+    });
+    button.setGlyph = next => area.setGlyph(next);
+    return button;
 }
 
 function cssUrl(uri) {
@@ -114,7 +146,7 @@ function artClip(url, size, radius = null) {
         x_align: Clutter.ActorAlign.CENTER,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    clip.clip_to_allocation = false;
+    clip.clip_to_allocation = true;
     const fallback = artIcon(null, size);
 
     const applyStyle = image => {
@@ -211,48 +243,53 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
         x_expand: true,
         y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
-        height: 12,
-        layout_manager: new Clutter.BinLayout(),
+        height: 8,
+        layout_manager: new Clutter.FixedLayout(),
     });
     const rail = new St.Widget({
         style_class: 'dynamic-island-seek-rail',
-        height: 6,
-        x_expand: true,
-        x_align: Clutter.ActorAlign.FILL,
-        y_align: Clutter.ActorAlign.CENTER,
+        height: 3,
+        x_expand: false,
     });
     const fill = new St.Widget({
         style_class: 'dynamic-island-seek-fill',
-        height: 6,
-        x_align: Clutter.ActorAlign.START,
-        y_align: Clutter.ActorAlign.CENTER,
-        width: Math.max(0, Math.round(pct * 148)),
+        height: 3,
+        x_expand: false,
+        width: 0,
     });
     track.add_child(rail);
     track.add_child(fill);
 
     let dragging = false;
+    let adjusted = false;
     let capturedId = 0;
     let last = pct;
 
-    const railWidth = () => Math.max(1, track.width || rail.width || 148);
+    const railWidth = () => {
+        const width = Math.max(0, track.width || 0);
+        const y = Math.max(0, Math.round((track.height - 3) / 2));
+        rail.set_position(0, y);
+        rail.set_size(width, 3);
+        fill.set_position(0, y);
+        fill.height = 3;
+        return width;
+    };
 
     const apply = (next, animate) => {
         const n = Math.max(0, Math.min(1, next ?? 0));
         last = n;
-        const width = Math.round(n * railWidth());
+        const width = progressFillWidth(n, railWidth());
         fill.remove_all_transitions();
         fill.visible = width > 0;
-        const target = width > 0 ? Math.max(6, width) : 0;
         if (animate && width > 0) {
             fill.ease({
-                width: target,
+                width,
                 duration: 120,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
             return n;
         }
-        fill.width = target;
+        fill.width = width;
         return n;
     };
 
@@ -321,6 +358,7 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
     });
 
     track.connect('notify::width', () => apply(last, false));
+    track.connect('notify::height', () => apply(last, false));
     track.connect('destroy', () => {
         dragging = false;
         stopCapture();
@@ -340,30 +378,6 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
     return track;
 }
 
-function iconButton(iconName, callback, extraClass = '', iconSize = null) {
-    const size = iconSize ?? (extraClass.includes('compact-play')
-        ? 14
-        : extraClass.includes('play') ? 18 : 15);
-    const button = new St.Button({
-        style_class: `dynamic-island-icon-button ${extraClass}`.trim(),
-        reactive: true,
-        can_focus: true,
-        track_hover: true,
-        child: new St.Icon({
-            icon_name: iconName,
-            icon_size: size,
-        }),
-    });
-    button.connect('button-press-event', () => {
-        callback();
-        return Clutter.EVENT_STOP;
-    });
-    button.setIconName = name => {
-        button.child.icon_name = name;
-    };
-    return button;
-}
-
 function levelBar(value) {
     const pct = Math.max(0, Math.min(1, value ?? 0));
     const track = new St.Widget({
@@ -371,21 +385,47 @@ function levelBar(value) {
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
         y_expand: false,
+        height: 8,
+        layout_manager: new Clutter.FixedLayout(),
     });
     const fill = new St.Widget({
         style_class: 'dynamic-island-level-fill',
-        height: 5,
-        width: Math.max(5, Math.round(pct * 148)),
+        height: 8,
+        width: 0,
+        x_expand: false,
+        y_expand: false,
     });
     track.add_child(fill);
-    track.setLevel = next => {
-        const n = Math.max(0, Math.min(1, next ?? 0));
-        fill.ease({
-            width: Math.max(5, Math.round(n * 148)),
-            duration: 140,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
+
+    const paint = n => {
+        fill.style = n > 0.8
+            ? 'background-color: #ffe4d4;'
+            : 'background-color: #ffffff;';
     };
+
+    let level = pct;
+    const apply = (next, animate = false) => {
+        const n = Math.max(0, Math.min(1, next ?? 0));
+        level = n;
+        const width = progressFillWidth(n, track.width);
+        fill.set_position(0, 0);
+        fill.height = 8;
+        fill.remove_all_transitions();
+        fill.visible = width > 0;
+        if (animate && width > 0) {
+            fill.ease({
+                width,
+                duration: 140,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        } else {
+            fill.width = width;
+        }
+        paint(n);
+    };
+    track.connect('notify::width', () => apply(level));
+    track.setLevel = next => apply(next, true);
+    apply(level);
     return track;
 }
 
@@ -507,6 +547,8 @@ function marqueeLabel(text, styleClass, {expand = true, height = 18} = {}) {
         });
         widget.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         widget.clutter_text.single_line_mode = true;
+        const optical = /subtitle|seek-time/.test(styleClass ?? '') ? 'text' : 'display';
+        widget.style = typeCss(optical);
         return widget;
     };
 
@@ -632,36 +674,12 @@ function splitChrome({leading = null, trailing = null}) {
     return root;
 }
 
-function volumeIconName(level, kind) {
-    if (kind === Kind.BRIGHTNESS)
-        return 'display-brightness-symbolic';
-    if (kind === Kind.MUTE)
-        return level === 0
-            ? 'microphone-sensitivity-muted-symbolic'
-            : 'microphone-sensitivity-high-symbolic';
-    if (level == null)
-        return 'audio-volume-medium-symbolic';
-    if (level <= 0.01)
-        return 'audio-volume-muted-symbolic';
-    if (level < 0.34)
-        return 'audio-volume-low-symbolic';
-    if (level < 0.67)
-        return 'audio-volume-medium-symbolic';
-    return 'audio-volume-high-symbolic';
-}
-
 export function buildIdleView() {
     return new St.Widget({
         style_class: 'dynamic-island-idle',
         x_expand: true,
         y_expand: true,
     });
-}
-
-function mediaPlayIcon(playing) {
-    return playing
-        ? 'media-playback-pause-symbolic'
-        : 'media-playback-start-symbolic';
 }
 
 export function buildMediaCompact(payload) {
@@ -678,11 +696,11 @@ export function buildMediaCompact(payload) {
     const eq = equalizer(payload?.playing === true, {height: 14});
     eq.x_align = Clutter.ActorAlign.CENTER;
     eq.y_align = Clutter.ActorAlign.CENTER;
-    const play = iconButton(
-        mediaPlayIcon(payload?.playing === true),
+    const play = glyphButton(
+        mediaPlayGlyph(payload?.playing === true),
         () => hold.payload?.playPause?.(),
         'is-compact-play',
-        14);
+        13);
     play.x_align = Clutter.ActorAlign.CENTER;
     play.y_align = Clutter.ActorAlign.CENTER;
     stack.add_child(eq);
@@ -714,112 +732,11 @@ export function buildMediaCompact(payload) {
         root._payload = next;
         art.setMedia(next);
         eq.setPlaying(next?.playing === true);
-        play.setIconName(mediaPlayIcon(next?.playing === true));
+        play.setGlyph(mediaPlayGlyph(next?.playing === true));
         refreshPalette(next?.artUrl);
         showHover(root._hover);
     };
     return root;
-}
-
-function eventY(event) {
-    try {
-        const coords = event.get_coords();
-        return coords[coords.length - 1] ?? coords[1] ?? 0;
-    } catch {
-        return 0;
-    }
-}
-
-function volumeOutput(payload, getPayload) {
-    const button = new St.Button({
-        style_class: 'dynamic-island-icon-button is-output dynamic-island-volume',
-        reactive: true,
-        can_focus: true,
-        track_hover: true,
-        x_align: Clutter.ActorAlign.END,
-        y_align: Clutter.ActorAlign.CENTER,
-        child: new St.Icon({
-            icon_name: volumeIconName(payload?.volume, Kind.VOLUME),
-            icon_size: 16,
-        }),
-    });
-
-    const setLevel = level => {
-        button.child.icon_name = volumeIconName(level, Kind.VOLUME);
-    };
-
-    const commit = next => {
-        const value = Math.max(0, Math.min(1, next));
-        getPayload()?.setVolume?.(value);
-        setLevel(value);
-    };
-
-    button.connect('scroll-event', (_actor, event) => {
-        let delta = 0;
-        try {
-            const direction = event.get_scroll_direction();
-            if (direction === Clutter.ScrollDirection.UP)
-                delta = 0.06;
-            else if (direction === Clutter.ScrollDirection.DOWN)
-                delta = -0.06;
-            else if (direction === Clutter.ScrollDirection.SMOOTH) {
-                const [, dy] = event.get_scroll_delta();
-                delta = -dy * 0.06;
-            }
-        } catch {
-            return Clutter.EVENT_STOP;
-        }
-        commit((getPayload()?.volume ?? 0) + delta);
-        return Clutter.EVENT_STOP;
-    });
-
-    let dragging = false;
-    let capturedId = 0;
-    let startY = 0;
-    let startVol = 0;
-
-    const stopCapture = () => {
-        disconnectStage(capturedId);
-        capturedId = 0;
-    };
-
-    const finish = () => {
-        dragging = false;
-        stopCapture();
-    };
-
-    const onCaptured = (_stage, event) => {
-        if (!dragging)
-            return Clutter.EVENT_PROPAGATE;
-        const type = event.type();
-        if (type === Clutter.EventType.MOTION || type === Clutter.EventType.TOUCH_UPDATE) {
-            const dy = startY - eventY(event);
-            commit(startVol + dy / 140);
-            return Clutter.EVENT_STOP;
-        }
-        if (type === Clutter.EventType.BUTTON_RELEASE ||
-            type === Clutter.EventType.TOUCH_END ||
-            type === Clutter.EventType.TOUCH_CANCEL) {
-            finish();
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
-    };
-
-    button.connect('button-press-event', (_actor, event) => {
-        if (!isPrimaryPress(event))
-            return Clutter.EVENT_PROPAGATE;
-        dragging = true;
-        startY = eventY(event);
-        startVol = getPayload()?.volume ?? 0;
-        stopCapture();
-        capturedId = connectStage('captured-event', onCaptured);
-        return Clutter.EVENT_STOP;
-    });
-
-    button.connect('destroy', finish);
-    button.setLevel = setLevel;
-    return button;
 }
 
 export function buildMediaExpanded(payload) {
@@ -829,21 +746,27 @@ export function buildMediaExpanded(payload) {
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
+    root.clip_to_allocation = true;
     root._payload = payload;
     root.suppressHoverScale = true;
 
-    const art = artClip(payload?.artUrl, 108, 14);
+    const artGlow = new St.Bin({
+        style_class: 'dynamic-island-art-glow',
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const art = artClip(payload?.artUrl, 52, 11);
     art.setMedia(payload);
-    art.y_align = Clutter.ActorAlign.CENTER;
-    root.add_child(art);
+    artGlow.set_child(art);
+    root.add_child(artGlow);
 
     const col = new St.BoxLayout({
         vertical: true,
         x_expand: true,
-        y_expand: true,
+        y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
         style_class: 'dynamic-island-media-copy',
     });
+    col.clip_to_allocation = true;
 
     const head = new St.BoxLayout({
         style_class: 'dynamic-island-media-head',
@@ -851,23 +774,25 @@ export function buildMediaExpanded(payload) {
         y_expand: false,
         y_align: Clutter.ActorAlign.START,
     });
+    head.clip_to_allocation = true;
     const textCol = new St.BoxLayout({
         vertical: true,
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
         style_class: 'dynamic-island-text-col is-media',
     });
+    textCol.clip_to_allocation = true;
     const title = marqueeLabel(payload?.title || 'Not playing', 'dynamic-island-title', {
-        height: 18,
+        height: 16,
     });
     const artist = marqueeLabel(payload?.artist || '', 'dynamic-island-subtitle', {
-        height: 15,
+        height: 12,
     });
     textCol.add_child(title);
     textCol.add_child(artist);
     head.add_child(textCol);
 
-    const eq = equalizer(payload?.playing === true, {accent: true, height: 22});
+    const eq = equalizer(payload?.playing === true, {accent: true, height: 16});
     eq.y_align = Clutter.ActorAlign.START;
     head.add_child(eq);
     col.add_child(head);
@@ -893,23 +818,21 @@ export function buildMediaExpanded(payload) {
     const timeRow = new St.BoxLayout({
         style_class: 'dynamic-island-seek-times',
         x_expand: true,
+        y_expand: false,
+        y_align: Clutter.ActorAlign.CENTER,
     });
     const elapsed = label(formatMediaClockUs(positionUs), 'dynamic-island-seek-time');
     const remaining = label(
         formatMediaRemainingUs(positionUs, lengthUs),
         'dynamic-island-seek-time is-remaining');
     remaining.clutter_text.line_alignment = Pango.Alignment.RIGHT;
-    timeRow.add_child(elapsed);
-    timeRow.add_child(new St.Widget({x_expand: true, height: 1}));
-    timeRow.add_child(remaining);
 
     const previewTimes = nextFrac => {
-        const length = root._payload?.lengthUs ?? 0;
+        const length = clock.lengthUs;
         const pos = length > 0 ? nextFrac * length : 0;
         elapsed.text = formatMediaClockUs(pos);
         remaining.text = formatMediaRemainingUs(pos, length);
     };
-
     const seek = dragBar('dynamic-island-seek', frac, {
         onCommit: next => {
             const length = root._payload?.lengthUs ?? 0;
@@ -919,64 +842,44 @@ export function buildMediaExpanded(payload) {
         },
         onPreview: previewTimes,
     });
-    seekBlock.add_child(seek);
+    timeRow.add_child(elapsed);
+    timeRow.add_child(seek);
+    timeRow.add_child(remaining);
     seekBlock.add_child(timeRow);
     col.add_child(seekBlock);
 
-    const bottom = new St.BoxLayout({
+    const bottom = new St.Bin({
         style_class: 'dynamic-island-media-bottom',
         x_expand: true,
         y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
-    });
-    const leftSlot = new St.Widget({
-        x_expand: true,
-        width: 28,
-        height: 1,
-        reactive: false,
+        x_align: Clutter.ActorAlign.FILL,
     });
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
         x_expand: false,
+        x_align: Clutter.ActorAlign.CENTER,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    const prev = iconButton(
-        'media-skip-backward-symbolic',
+    const prev = glyphButton(
+        Glyph.prev,
         () => root._payload?.previous?.(),
         'is-transport-skip',
-        20);
-    const play = iconButton(
-        mediaPlayIcon(payload?.playing === true),
+        14);
+    const play = glyphButton(
+        mediaPlayGlyph(payload?.playing === true),
         () => root._payload?.playPause?.(),
         'is-transport-play',
-        28);
-    const next = iconButton(
-        'media-skip-forward-symbolic',
+        16);
+    const next = glyphButton(
+        Glyph.next,
         () => root._payload?.next?.(),
         'is-transport-skip',
-        20);
+        14);
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
-
-    const volume = volumeOutput(payload, () => root._payload);
-    const showVolume = payload?.hasVolume === true;
-    volume.visible = showVolume;
-    volume.reactive = showVolume;
-    const rightSlot = new St.BoxLayout({
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    rightSlot.add_child(new St.Widget({
-        x_expand: true,
-        height: 1,
-        reactive: false,
-    }));
-    rightSlot.add_child(volume);
-
-    bottom.add_child(leftSlot);
-    bottom.add_child(controls);
-    bottom.add_child(rightSlot);
+    bottom.set_child(controls);
     col.add_child(bottom);
     root.add_child(col);
 
@@ -1016,7 +919,7 @@ export function buildMediaExpanded(payload) {
         art.setMedia(data);
         title.setText(data?.title || 'Not playing');
         artist.setText(data?.artist || '');
-        play.setIconName(mediaPlayIcon(data?.playing === true));
+        play.setGlyph(mediaPlayGlyph(data?.playing === true));
         eq.setPlaying(data?.playing === true);
         refreshPalette(data?.artUrl);
 
@@ -1036,12 +939,6 @@ export function buildMediaExpanded(payload) {
         if (!seek.dragging)
             paintClock();
         armTick();
-
-        const on = data?.hasVolume === true;
-        volume.visible = on;
-        volume.reactive = on;
-        if (on)
-            volume.setLevel(data.volume ?? 0);
     };
 
     armTick();
@@ -1049,38 +946,9 @@ export function buildMediaExpanded(payload) {
     return root;
 }
 
-export function buildNotificationView(payload) {
-    const root = new St.BoxLayout({
-        style_class: 'dynamic-island-notification',
-        x_expand: true,
-        y_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    const badge = new St.Bin({
-        style_class: 'dynamic-island-app-badge',
-        width: 32,
-        height: 32,
-    });
-    badge.clip_to_allocation = true;
-    badge.set_child(iconFromGicon(payload?.gicon, payload?.iconName || 'dialog-information-symbolic', 22));
-    root.add_child(badge);
-
-    const textCol = new St.BoxLayout({
-        vertical: true,
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-        style_class: 'dynamic-island-text-col',
-    });
-    textCol.add_child(label(payload?.title || '', 'dynamic-island-title', true));
-    textCol.add_child(label(payload?.body || '', 'dynamic-island-subtitle', true));
-    root.add_child(textCol);
-    return root;
-}
-
 export function buildOsdView(payload) {
     const kind = payload?.kind;
-    const iconName = payload?.iconName || volumeIconName(payload?.level, kind);
-    const glyph = icon(iconName, 16);
+    const glyph = glyphActor(osdGlyph(kind, payload?.level), 20);
     const bar = payload?.level != null ? levelBar(payload.level) : null;
     const percent = payload?.level != null
         ? `${Math.round(payload.level * 100)}`
@@ -1099,7 +967,7 @@ export function buildOsdView(payload) {
     root.add_child(pct);
 
     root.update = next => {
-        glyph.icon_name = next?.iconName || volumeIconName(next?.level, next?.kind ?? kind);
+        glyph.setGlyph(osdGlyph(next?.kind ?? kind, next?.level));
         if (bar && next?.level != null)
             bar.setLevel(next.level);
         if (next?.level != null)
@@ -1114,7 +982,7 @@ export function buildChargingView(payload) {
     const charging = payload?.charging !== false;
     const percent = Math.round(payload?.percent ?? 0);
     const title = label(charging ? `Charging  ${percent}%` : `${percent}%`, 'dynamic-island-title');
-    const glyph = icon(charging ? 'battery-level-100-charged-symbolic' : 'battery-symbolic', 18);
+    const glyph = glyphActor(charging ? Glyph.batteryCharge : Glyph.battery, 18);
     const root = new St.BoxLayout({
         style_class: 'dynamic-island-system',
         x_expand: true,
@@ -1127,7 +995,7 @@ export function buildChargingView(payload) {
     root.update = next => {
         const on = next?.charging !== false;
         const n = Math.round(next?.percent ?? 0);
-        glyph.icon_name = on ? 'battery-level-100-charged-symbolic' : 'battery-symbolic';
+        glyph.setGlyph(on ? Glyph.batteryCharge : Glyph.battery);
         title.text = on ? `Charging  ${n}%` : `${n}%`;
     };
     return root;
@@ -1149,25 +1017,25 @@ export function buildBluetoothView(payload) {
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    root.add_child(icon('bluetooth-active-symbolic', 18));
+    root.add_child(glyphActor(Glyph.bluetooth, 18));
     root.add_child(textCol);
     return root;
 }
 
 export function buildPrivacyView(payload) {
     const cam = payload?.camera
-        ? icon('camera-web-symbolic', 14)
+        ? glyphActor(Glyph.camera, 14)
         : new St.Widget({width: 1, height: 1});
     const mic = payload?.mic
-        ? icon('audio-input-microphone-symbolic', 14)
+        ? glyphActor(Glyph.mic, 14)
         : new St.Widget({width: 1, height: 1});
     const root = splitChrome({leading: cam, trailing: mic});
     root.update = next => {
         root.leading.replace(next?.camera
-            ? icon('camera-web-symbolic', 14)
+            ? glyphActor(Glyph.camera, 14)
             : new St.Widget({width: 1, height: 1}));
         root.trailing.replace(next?.mic
-            ? icon('audio-input-microphone-symbolic', 14)
+            ? glyphActor(Glyph.mic, 14)
             : new St.Widget({width: 1, height: 1}));
     };
     return root;
@@ -1189,7 +1057,7 @@ export function buildRecordingView(payload, _clockText, expanded) {
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        root.add_child(icon('media-record-symbolic', 16));
+        root.add_child(glyphActor(Glyph.record, 16));
         root.add_child(title);
         root.update = next => {
             if (next?.seconds != null) {
@@ -1228,8 +1096,6 @@ export function buildView(activity, clockText) {
         return expanded
             ? buildMediaExpanded(payload)
             : buildMediaCompact(payload);
-    case Kind.NOTIFICATION:
-        return buildNotificationView(payload);
     case Kind.VOLUME:
     case Kind.BRIGHTNESS:
     case Kind.MUTE:

@@ -44,16 +44,6 @@ export class Presenter {
             return;
         }
 
-        if (cur.kind === Kind.NOTIFICATION) {
-            try {
-                cur.payload?.activate?.();
-            } catch {
-                // notification already gone
-            }
-            this._stack.remove(cur.id);
-            return;
-        }
-
         if (cur.kind === Kind.MEDIA || cur.kind === Kind.RECORDING) {
             this._stack.toggleExpanded();
             return;
@@ -89,9 +79,9 @@ export class Presenter {
 
         this._key = key;
         this._view = actor;
-        const fade = this._island.geometry.height !== geom.height ||
+        const sizeChanged = this._island.geometry.height !== geom.height ||
             this._island.geometry.width !== geom.width;
-        this._island.setContent(actor, {fade});
+        this._island.setContent(actor, {fade: sizeChanged, delayReveal: sizeChanged});
         this._island.morphTo(geom, this._duration()).catch(() => {});
         this._armExpiry();
     }

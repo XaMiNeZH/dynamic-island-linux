@@ -15,8 +15,8 @@
 }
 
 .dynamic-island-capsule {
-    background-color: #000000;
-    border-radius: 17px;
+    background-color: transparent;
+    border-radius: 0;
     border-width: 0;
     box-shadow: none;
     color: #f5f5f7;
@@ -24,26 +24,18 @@
 }
 
 .dynamic-island-capsule.is-hover {
-    background-color: #000000;
+    background-color: transparent;
     box-shadow: none;
 }
 
 .dynamic-island-content {
     padding: 0 10px;
     background-color: transparent;
+    box-shadow: none;
 }
 
 .dynamic-island-capsule.is-expanded .dynamic-island-content {
-    padding: 12px 16px;
-}
-
-.dynamic-island-clock,
-.dynamic-island-title,
-.dynamic-island-subtitle,
-.dynamic-island-osd-label,
-.dynamic-island-seek-time,
-.dynamic-island-rec-time {
-    font-family: "SF Pro Display", "SF Pro Text", Inter, "Adwaita Sans", sans-serif;
+    padding: 8px 10px;
 }
 
 .dynamic-island-clock {
@@ -63,7 +55,8 @@
 
 .dynamic-island-media-expanded .dynamic-island-title {
     font-size: 14px;
-    letter-spacing: -0.15px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
 }
 
 .dynamic-island-subtitle {
@@ -74,14 +67,22 @@
 
 .dynamic-island-media-expanded .dynamic-island-subtitle {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.70);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.66);
+}
+
+.dynamic-island-osd-label,
+.dynamic-island-seek-time,
+.dynamic-island-rec-time {
+    font-feature-settings: "tnum" 1;
+    font-variant-numeric: tabular-nums;
 }
 
 .dynamic-island-osd-label {
     font-weight: 600;
-    font-size: 12px;
+    font-size: 13px;
     color: #f5f5f7;
-    min-width: 28px;
+    min-width: 32px;
     text-align: right;
 }
 
@@ -103,15 +104,18 @@
 
 .dynamic-island-media-head {
     spacing: 8px;
+    min-width: 0;
 }
 
 .dynamic-island-media-copy {
-    spacing: 4px;
+    spacing: 3px;
+    min-width: 0;
 }
 
 .dynamic-island-text-col {
     spacing: 2px;
     padding-left: 2px;
+    min-width: 0;
 }
 
 .dynamic-island-text-col.is-media {
@@ -121,6 +125,7 @@
 
 .dynamic-island-marquee {
     padding: 0;
+    min-width: 0;
 }
 
 .dynamic-island-icon {
@@ -132,6 +137,17 @@
     background-color: #111111;
     background-size: cover;
     background-position: center;
+}
+
+.dynamic-island-art-glow {
+    padding: 0;
+    border-radius: 11px;
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.dynamic-island-glyph {
+    background-color: transparent;
 }
 
 .dynamic-island-icon-button {
@@ -165,48 +181,45 @@
 }
 
 .dynamic-island-icon-button.is-transport-skip {
-    width: 36px;
-    height: 36px;
-    border-radius: 18px;
+    width: 24px;
+    height: 22px;
+    border-radius: 11px;
+    padding: 2px;
 }
 
 .dynamic-island-icon-button.is-transport-play {
-    width: 42px;
-    height: 42px;
-    border-radius: 21px;
-}
-
-.dynamic-island-icon-button.is-output {
     width: 28px;
-    height: 28px;
-    border-radius: 14px;
-    padding: 0;
-    color: rgba(255, 255, 255, 0.92);
+    height: 24px;
+    border-radius: 12px;
+    padding: 2px;
 }
 
 .dynamic-island-controls {
-    spacing: 16px;
+    spacing: 10px;
 }
 
 .dynamic-island-media-bottom {
-    height: 40px;
+    height: 22px;
+    border-width: 0;
+    padding-top: 0;
 }
 
 .dynamic-island-seek-block {
-    spacing: 2px;
-    padding-top: 2px;
+    spacing: 0;
+    padding-top: 0;
     padding-bottom: 0;
 }
 
 .dynamic-island-seek-times {
-    spacing: 0;
+    height: 11px;
+    spacing: 5px;
 }
 
 .dynamic-island-seek-time {
     font-weight: 500;
     font-size: 9px;
-    color: rgba(255, 255, 255, 0.55);
-    min-width: 28px;
+    color: rgba(255, 255, 255, 0.60);
+    min-width: 32px;
 }
 
 .dynamic-island-seek-time.is-remaining {
@@ -215,35 +228,38 @@
 
 .dynamic-island-seek {
     min-width: 160px;
+    height: 8px;
 }
 
 .dynamic-island-seek-rail {
-    background-color: rgba(255, 255, 255, 0.22);
-    border-radius: 3px;
-    height: 6px;
+    background-color: rgba(255, 255, 255, 0.20);
+    border-radius: 1.5px;
+    height: 3px;
 }
 
 .dynamic-island-seek-fill {
     background-color: #ffffff;
-    border-radius: 3px;
-    height: 6px;
+    border-radius: 1.5px;
+    height: 3px;
 }
 
 .dynamic-island-osd {
-    spacing: 10px;
+    spacing: 12px;
 }
 
 .dynamic-island-level {
     background-color: rgba(255, 255, 255, 0.18);
-    border-radius: 2px;
-    min-width: 120px;
-    height: 3px;
+    border-radius: 4px;
+    border-width: 0;
+    min-width: 132px;
+    padding: 0;
+    height: 8px;
 }
 
 .dynamic-island-level-fill {
     background-color: #ffffff;
-    border-radius: 2px;
-    height: 3px;
+    border-radius: 4px;
+    height: 8px;
 }
 
 .dynamic-island-eq {
@@ -257,9 +273,9 @@
 }
 
 .dynamic-island-eq-accent {
-    spacing: 2.5px;
-    height: 22px;
-    min-width: 30px;
+    spacing: 2px;
+    height: 18px;
+    min-width: 28px;
 }
 
 .dynamic-island-eq-accent .dynamic-island-eq-bar {
@@ -282,18 +298,12 @@
     color: #ff453a;
 }
 
-.dynamic-island-app-badge {
-    border-radius: 8px;
-    background-color: #111111;
-}
-
 .dynamic-island-media-expanded {
-    spacing: 14px;
+    spacing: 10px;
 }
 
-.dynamic-island-notification,
 .dynamic-island-system {
-    spacing: 4px;
+    spacing: 6px;
 }
 
 .dynamic-island-idle {

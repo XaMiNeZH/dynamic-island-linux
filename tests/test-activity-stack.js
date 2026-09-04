@@ -36,9 +36,9 @@ now += 600;
 stack.expireDue();
 assertEq(stack.current().kind, Kind.MEDIA, 'expired OSD returns to media');
 
-stack.upsert({id: 'notification', kind: Kind.NOTIFICATION, durationMs: 1000, payload: {title: 'Hi'}});
-assertEq(stack.current().kind, Kind.NOTIFICATION, 'notification beats media');
-assertEq(stack.current().priority, Priority[Kind.NOTIFICATION], 'notification priority');
+stack.upsert({id: 'charging', kind: Kind.CHARGING, durationMs: 1000, payload: {percent: 80}});
+assertEq(stack.current().kind, Kind.CHARGING, 'system activity preempts media');
+assertEq(stack.current().priority, Priority[Kind.CHARGING], 'system activity priority');
 
 stack.toggleExpanded();
 assertEq(stack.current().expanded, true, 'can expand current activity');
@@ -66,7 +66,7 @@ stack.upsert({id: 'media', kind: Kind.MEDIA, persistent: true});
 const next = stack.nextExpiryAt();
 assert(next == null, 'persistent items have no expiry');
 
-stack.upsert({id: 'n', kind: Kind.NOTIFICATION, durationMs: 250});
+stack.upsert({id: 'n', kind: Kind.BLUETOOTH, durationMs: 250});
 assert(stack.nextExpiryAt() === now + 250, 'nextExpiryAt tracks soonest transient');
 
 print(`activity-stack: ${passed} passed, ${failed} failed`);

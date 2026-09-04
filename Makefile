@@ -14,7 +14,11 @@ test:
 	gjs --module tests/test-motion.js
 	gjs --module tests/test-clock-format.js
 	gjs --module tests/test-geometry.js
+	gjs --module tests/test-fonts.js
+	gjs --module tests/test-squircle.js
+	gjs --module tests/test-glyphs.js
 	gjs --module tests/test-media-style.js
+	gjs --module tests/test-control-target.js
 	gjs --module tests/test-panel-media.js
 
 check: schemas test

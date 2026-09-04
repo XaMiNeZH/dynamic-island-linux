@@ -1,19 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.dynamic-island" path="/org/gnome/shell/extensions/dynamic-island/">
-    <key name="suppress-banners" type="b">
-      <default>true</default>
-      <summary>Suppress GNOME notification banners</summary>
-      <description>Show notifications on the island instead of the default banner.</description>
-    </key>
     <key name="takeover-osd" type="b">
       <default>true</default>
       <summary>Take over system OSD</summary>
       <description>Show volume, brightness, and mute on the island instead of the stock OSD.</description>
-    </key>
-    <key name="enable-notifications" type="b">
-      <default>true</default>
-      <summary>Notifications</summary>
     </key>
     <key name="enable-media" type="b">
       <default>true</default>
@@ -47,10 +38,6 @@
     <key name="animation-duration" type="i">
       <default>420</default>
       <summary>Morph duration in milliseconds</summary>
-    </key>
-    <key name="notification-timeout" type="i">
-      <default>4200</default>
-      <summary>Notification hold time in milliseconds</summary>
     </key>
     <key name="osd-timeout" type="i">
       <default>1800</default>

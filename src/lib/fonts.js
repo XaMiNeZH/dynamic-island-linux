@@ -1,6 +1,130 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import GLib from 'gi://GLib';
+import PangoCairo from 'gi://PangoCairo';
+
 const FONT_FILES = ['Inter-Regular.ttf', 'Inter-SemiBold.ttf'];
+
+export const FALLBACK_FAMILY = 'Inter';
+
+const DISPLAY_ALIASES = [
+    'SF Pro Display',
+    'SFProDisplay',
+    'SF Pro Display Regular',
+    '.SF NS Display',
+    'SFNS Display',
+    'SF Pro',
+    'SFPro',
+];
+
+const TEXT_ALIASES = [
+    'SF Pro Text',
+    'SFProText',
+    'SF Pro Text Regular',
+    '.SF NS Text',
+    'SFNS Text',
+    'SF Pro',
+    'SFPro',
+    'SF Pro Display',
+    'SFProDisplay',
+];
+
+/** Last resolved families. Views read this after registerIslandFonts(). */
+export const islandType = {
+    display: FALLBACK_FAMILY,
+    text: FALLBACK_FAMILY,
+};
+
+function normalize(name) {
+    return String(name ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+}
+
+export function pickFamily(available, aliases, fallback = FALLBACK_FAMILY) {
+    const list = Array.isArray(available) ? available.filter(Boolean) : [];
+    const byNorm = new Map(list.map(name => [normalize(name), name]));
+    for (const alias of aliases) {
+        const hit = byNorm.get(normalize(alias));
+        if (hit)
+            return hit;
+    }
+    for (const alias of aliases) {
+        const needle = normalize(alias);
+        for (const name of list) {
+            if (normalize(name).includes(needle) || needle.includes(normalize(name)))
+                return name;
+        }
+    }
+    return fallback;
+}
+
+export function resolveIslandFonts(availableFamilies) {
+    const display = pickFamily(availableFamilies, DISPLAY_ALIASES, FALLBACK_FAMILY);
+    const text = pickFamily(availableFamilies, TEXT_ALIASES, display);
+    return {display, text};
+}
+
+function namesFromFontMap(map) {
+    return (map?.list_families?.() ?? []).map(f => f.get_name()).filter(Boolean);
+}
+
+function listFcListFamilies() {
+    try {
+        const [ok, stdout] = GLib.spawn_command_line_sync('fc-list : family');
+        if (!ok || !stdout)
+            return [];
+        const text = new TextDecoder().decode(stdout);
+        const names = [];
+        for (const line of text.split('\n')) {
+            for (const part of line.split(',')) {
+                const name = part.trim();
+                if (name)
+                    names.push(name);
+            }
+        }
+        return names;
+    } catch {
+        return [];
+    }
+}
+
+export function listSystemFamilies() {
+    const seen = new Set();
+    const names = [];
+    const add = list => {
+        for (const name of list ?? []) {
+            const key = normalize(name);
+            if (!key || seen.has(key))
+                continue;
+            seen.add(key);
+            names.push(name);
+        }
+    };
+
+    // St renders with the PangoCairo map. Query it directly rather than the
+    // abstract Pango.FontMap or the legacy global `imports` object, both of
+    // which can be absent in GJS ESM.
+    try {
+        add(namesFromFontMap(PangoCairo.FontMap.get_default()));
+    } catch {
+        // A usable fontconfig list below still gives us a deterministic stack.
+    }
+
+    add(listFcListFamilies());
+    return names;
+}
+
+export function typeStack(optical = 'display') {
+    const family = optical === 'text' ? islandType.text : islandType.display;
+    // St's CSS parser accepts quoted family names, but accepting a fallback
+    // list differs across Shell releases. The resolver only returns a family
+    // registered by Pango/fontconfig, so give St that exact family and let
+    // Pango perform its normal glyph fallback.
+    return `"${String(family).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+export function typeCss(optical = 'display') {
+    return `font-family: ${typeStack(optical)};`;
+}
 
 function addFontconfigFile(path) {
     let lib = null;
@@ -40,6 +164,11 @@ export function registerIslandFonts(extensionDir) {
                 addFontconfigFile(path);
         }
     } catch {
-        // CSS @font-face and system Inter still apply
+        // CSS @font-face still applies
     }
+
+    const resolved = resolveIslandFonts(listSystemFamilies());
+    islandType.display = resolved.display;
+    islandType.text = resolved.text;
+    return resolved;
 }
