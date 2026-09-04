@@ -10,16 +10,12 @@
     background-color: #000000;
 }
 
-.dynamic-island-capsule.is-expanded {
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-}
-
 .dynamic-island-content {
     padding: 0 10px;
 }
 
 .dynamic-island-capsule.is-expanded .dynamic-island-content {
-    padding: 14px 16px 12px;
+    padding: 12px 18px 10px;
 }
 
 .dynamic-island-clock {
@@ -34,6 +30,10 @@
     font-weight: 600;
     font-size: 15px;
     color: #ffffff;
+}
+
+.dynamic-island-media-expanded .dynamic-island-title {
+    font-size: 16px;
 }
 
 .dynamic-island-subtitle {
@@ -110,30 +110,46 @@
     background-color: rgba(255, 255, 255, 0.12);
 }
 
+.dynamic-island-icon-button.is-transport-skip {
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+}
+
 .dynamic-island-icon-button.is-transport-play {
-    width: 36px;
-    height: 36px;
-    border-radius: 18px;
+    width: 48px;
+    height: 48px;
+    border-radius: 24px;
 }
 
 .dynamic-island-controls {
-    spacing: 16px;
-    padding-top: 6px;
+    spacing: 28px;
+    padding-top: 4px;
 }
 
 .dynamic-island-seek-row {
     spacing: 8px;
-    padding-top: 10px;
+    padding-top: 6px;
 }
 
 .dynamic-island-seek-time {
     font-size: 10px;
     color: rgba(255, 255, 255, 0.55);
-    min-width: 28px;
+    min-width: 36px;
 }
 
-.dynamic-island-seek {
-    min-width: 160px;
+.dynamic-island-seek-time.is-remaining {
+    text-align: right;
+}
+
+.dynamic-island-seek,
+.dynamic-island-volume {
+    min-width: 120px;
+}
+
+.dynamic-island-volume-row {
+    spacing: 8px;
+    padding-top: 2px;
 }
 
 .dynamic-island-osd {
@@ -163,6 +179,16 @@
     border-radius: 1.5px;
 }
 
+.dynamic-island-eq-accent {
+    spacing: 3px;
+    height: 22px;
+    min-width: 24px;
+}
+
+.dynamic-island-eq-accent .dynamic-island-eq-bar {
+    width: 3px;
+}
+
 .dynamic-island-rec-dot {
     background-color: #ff453a;
     border-radius: 4px;
@@ -184,7 +210,10 @@
     background-color: #111111;
 }
 
-.dynamic-island-media-expanded,
+.dynamic-island-media-expanded {
+    spacing: 6px;
+}
+
 .dynamic-island-notification,
 .dynamic-island-system {
     spacing: 4px;

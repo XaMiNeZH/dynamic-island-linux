@@ -48,7 +48,7 @@ Disable restores notification banners, the stock OSD, and any panel media-contro
 | Notification | Pill springs into a card; click opens the app |
 | Media (compact) | Album art (or the player icon) and sound waves |
 | Media (hover) | Same compact pill, small symbolic play/pause that actually toggles |
-| Media (expanded) | Click opens a now-playing card with skip, seek, and play/pause |
+| Media (expanded) | Click opens a now-playing card with colored waves, leftover time, seek, and volume |
 | Volume / brightness / mute | Island takes over the GNOME OSD |
 | Charging | Percentage when you plug in |
 | Bluetooth | Device name on connect |

@@ -7,6 +7,7 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {Kind} from './activity-stack.js';
+import {formatMediaClockUs, formatMediaRemainingUs} from './utils.js';
 
 function label(text, styleClass, expand = false) {
     const widget = new St.Label({
@@ -92,68 +93,189 @@ function artClip(url, size) {
     return clip;
 }
 
-function formatClockUs(us) {
-    const sec = Math.max(0, Math.round((us ?? 0) / 1000000));
-    const minutes = Math.floor(sec / 60);
-    const seconds = sec % 60;
-    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+function fractionFromEvent(actor, event) {
+    let x = 0;
+    try {
+        const coords = event.get_coords();
+        x = coords[coords.length - 2] ?? coords[0] ?? 0;
+    } catch {
+        return null;
+    }
+    let origin = 0;
+    try {
+        const pos = actor.get_transformed_position();
+        origin = pos?.[0] ?? 0;
+    } catch {
+        origin = 0;
+    }
+    const width = Math.max(1, actor.width || 1);
+    return Math.max(0, Math.min(1, (x - origin) / width));
 }
 
-function seekBar(fraction, onSeek) {
+function isPrimaryPress(event) {
+    try {
+        const type = event.type();
+        if (type === Clutter.EventType.TOUCH_BEGIN)
+            return true;
+        const button = event.get_button();
+        return button === 1 || button === Clutter.BUTTON_PRIMARY;
+    } catch {
+        return true;
+    }
+}
+
+function connectStage(signal, handler) {
+    try {
+        const stage = globalThis.global?.stage;
+        if (!stage)
+            return 0;
+        return stage.connect(signal, handler);
+    } catch {
+        return 0;
+    }
+}
+
+function disconnectStage(id) {
+    if (!id)
+        return;
+    try {
+        globalThis.global?.stage?.disconnect(id);
+    } catch {
+        // stage already gone
+    }
+}
+
+function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
     const pct = Math.max(0, Math.min(1, fraction ?? 0));
-    const track = new St.Widget({
-        style_class: 'dynamic-island-seek',
+    const track = new St.BoxLayout({
+        style_class: `dynamic-island-slider ${styleClass}`.trim(),
         reactive: true,
+        track_hover: true,
         x_expand: true,
+        y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
         height: 16,
     });
     const rail = new St.Widget({
         style_class: 'dynamic-island-level',
-        y_align: Clutter.ActorAlign.CENTER,
-        y_expand: false,
-        height: 4,
+        height: 3,
         x_expand: true,
+        y_expand: false,
+        y_align: Clutter.ActorAlign.CENTER,
     });
     const fill = new St.Widget({
         style_class: 'dynamic-island-level-fill',
-        height: 4,
-        width: Math.max(4, Math.round(pct * 148)),
+        height: 3,
+        width: Math.max(3, Math.round(pct * 148)),
     });
     rail.add_child(fill);
     track.add_child(rail);
 
-    const apply = next => {
+    let dragging = false;
+    let capturedId = 0;
+    let last = pct;
+
+    const railWidth = () => Math.max(1, rail.width || track.width || 148);
+
+    const apply = (next, animate) => {
         const n = Math.max(0, Math.min(1, next ?? 0));
-        const width = Math.max(4, Math.round(n * Math.max(track.width || 148, 80)));
-        fill.ease({
-            width,
-            duration: 120,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
+        last = n;
+        const width = Math.max(3, Math.round(n * railWidth()));
+        fill.remove_all_transitions();
+        if (animate) {
+            fill.ease({
+                width,
+                duration: 120,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+            return n;
+        }
+        fill.width = width;
+        return n;
+    };
+
+    const stopCapture = () => {
+        disconnectStage(capturedId);
+        capturedId = 0;
+    };
+
+    const finish = event => {
+        if (!dragging)
+            return;
+        dragging = false;
+        stopCapture();
+        const next = event ? fractionFromEvent(track, event) : null;
+        const n = apply(next ?? last, false);
+        onCommit?.(n);
+    };
+
+    const preview = (event, animate = false) => {
+        const next = fractionFromEvent(track, event);
+        if (next == null)
+            return;
+        apply(next, animate);
+        onPreview?.(next);
+    };
+
+    const onCaptured = (_stage, event) => {
+        if (!dragging)
+            return Clutter.EVENT_PROPAGATE;
+        const type = event.type();
+        if (type === Clutter.EventType.MOTION || type === Clutter.EventType.TOUCH_UPDATE) {
+            preview(event);
+            return Clutter.EVENT_STOP;
+        }
+        if (type === Clutter.EventType.BUTTON_RELEASE ||
+            type === Clutter.EventType.TOUCH_END ||
+            type === Clutter.EventType.TOUCH_CANCEL) {
+            finish(event);
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
     };
 
     track.connect('button-press-event', (_actor, event) => {
-        let x = 0;
-        try {
-            const coords = event.get_coords();
-            x = coords[coords.length - 2] ?? coords[0] ?? 0;
-        } catch {
-            return Clutter.EVENT_STOP;
-        }
-        let origin = 0;
-        try {
-            const pos = track.get_transformed_position();
-            origin = pos?.[0] ?? 0;
-        } catch {
-            origin = 0;
-        }
-        const width = Math.max(1, track.width || 1);
-        onSeek?.(Math.max(0, Math.min(1, (x - origin) / width)));
+        if (!isPrimaryPress(event))
+            return Clutter.EVENT_PROPAGATE;
+        dragging = true;
+        preview(event);
+        stopCapture();
+        capturedId = connectStage('captured-event', onCaptured);
         return Clutter.EVENT_STOP;
     });
 
-    track.setLevel = apply;
+    track.connect('motion-event', (_actor, event) => {
+        if (!dragging || capturedId)
+            return Clutter.EVENT_PROPAGATE;
+        preview(event);
+        return Clutter.EVENT_STOP;
+    });
+
+    track.connect('button-release-event', (_actor, event) => {
+        if (!dragging || capturedId)
+            return Clutter.EVENT_PROPAGATE;
+        finish(event);
+        return Clutter.EVENT_STOP;
+    });
+
+    track.connect('notify::width', () => apply(last, false));
+    rail.connect('notify::width', () => apply(last, false));
+    track.connect('destroy', () => {
+        dragging = false;
+        stopCapture();
+    });
+
+    track.setLevel = next => {
+        if (dragging)
+            return;
+        apply(next, true);
+    };
+    Object.defineProperty(track, 'dragging', {
+        get() {
+            return dragging;
+        },
+    });
+    apply(pct, false);
     return track;
 }
 
@@ -206,19 +328,30 @@ function levelBar(value) {
     return track;
 }
 
-function equalizer(playing) {
+function equalizer(playing, options = {}) {
+    const accent = options.accent === true;
+    const barCount = options.bars ?? (accent ? 5 : 4);
+    const minH = accent ? 6 : 4;
+    const span = accent ? 14 : 10;
+    const palette = ['#ff7a59', '#ff8a55', '#ffb070', '#ff7a59', '#ff9a60'];
     const box = new St.BoxLayout({
-        style_class: 'dynamic-island-eq',
+        style_class: accent
+            ? 'dynamic-island-eq dynamic-island-eq-accent'
+            : 'dynamic-island-eq',
         y_align: Clutter.ActorAlign.CENTER,
         x_align: Clutter.ActorAlign.END,
+        x_expand: false,
     });
     const bars = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < barCount; i++) {
         const bar = new St.Widget({
             style_class: 'dynamic-island-eq-bar',
             width: 3,
-            height: playing ? 6 + (i % 3) * 3 : 4,
+            height: playing ? minH + (i % 3) * 3 : minH,
+            y_align: Clutter.ActorAlign.CENTER,
         });
+        if (accent)
+            bar.style = `background-color: ${palette[i % palette.length]};`;
         box.add_child(bar);
         bars.push(bar);
     }
@@ -228,12 +361,12 @@ function equalizer(playing) {
         if (!box._playing) {
             for (const bar of bars) {
                 bar.remove_all_transitions();
-                bar.height = 4;
+                bar.height = minH;
             }
             return GLib.SOURCE_CONTINUE;
         }
         for (const bar of bars) {
-            const next = 4 + Math.round(Math.random() * 10);
+            const next = minH + Math.round(Math.random() * span);
             bar.ease({
                 height: next,
                 duration: 140,
@@ -393,6 +526,7 @@ export function buildMediaExpanded(payload) {
         y_align: Clutter.ActorAlign.FILL,
     });
     root._payload = payload;
+    root.suppressHoverScale = true;
 
     const top = new St.BoxLayout({
         style_class: 'dynamic-island-row',
@@ -413,20 +547,36 @@ export function buildMediaExpanded(payload) {
     textCol.add_child(title);
     textCol.add_child(artist);
     top.add_child(textCol);
+
+    const eq = equalizer(payload?.playing === true, {accent: true});
+    top.add_child(eq);
     root.add_child(top);
 
-    const frac = (payload?.lengthUs ?? 0) > 0
-        ? (payload.positionUs ?? 0) / payload.lengthUs
-        : 0;
+    const lengthUs = payload?.lengthUs ?? 0;
+    const positionUs = payload?.positionUs ?? 0;
+    const frac = lengthUs > 0 ? positionUs / lengthUs : 0;
     const seekRow = new St.BoxLayout({
         style_class: 'dynamic-island-seek-row',
         x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
     });
-    const elapsed = label(formatClockUs(payload?.positionUs), 'dynamic-island-seek-time');
+    const elapsed = label(formatMediaClockUs(positionUs), 'dynamic-island-seek-time');
     const remaining = label(
-        (payload?.lengthUs ?? 0) > 0 ? formatClockUs(payload.lengthUs) : '0:00',
-        'dynamic-island-seek-time');
-    const seek = seekBar(frac, next => root._payload?.seek?.(next));
+        formatMediaRemainingUs(positionUs, lengthUs),
+        'dynamic-island-seek-time is-remaining');
+    remaining.clutter_text.line_alignment = Pango.Alignment.RIGHT;
+
+    const previewTimes = nextFrac => {
+        const length = root._payload?.lengthUs ?? 0;
+        const pos = length > 0 ? nextFrac * length : 0;
+        elapsed.text = formatMediaClockUs(pos);
+        remaining.text = formatMediaRemainingUs(pos, length);
+    };
+
+    const seek = dragBar('dynamic-island-seek', frac, {
+        onCommit: next => root._payload?.seek?.(next),
+        onPreview: previewTimes,
+    });
     seekRow.add_child(elapsed);
     seekRow.add_child(seek);
     seekRow.add_child(remaining);
@@ -435,18 +585,46 @@ export function buildMediaExpanded(payload) {
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
         x_align: Clutter.ActorAlign.CENTER,
+        x_expand: true,
     });
-    const prev = iconButton('media-skip-backward-symbolic', () => root._payload?.previous?.());
+    const prev = iconButton(
+        'media-skip-backward-symbolic',
+        () => root._payload?.previous?.(),
+        'is-transport-skip',
+        20);
     const play = iconButton(
         mediaPlayIcon(payload?.playing === true),
         () => root._payload?.playPause?.(),
         'is-transport-play',
-        18);
-    const next = iconButton('media-skip-forward-symbolic', () => root._payload?.next?.());
+        26);
+    const next = iconButton(
+        'media-skip-forward-symbolic',
+        () => root._payload?.next?.(),
+        'is-transport-skip',
+        20);
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
     root.add_child(controls);
+
+    const volumeRow = new St.BoxLayout({
+        style_class: 'dynamic-island-volume-row',
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const volIcon = icon('audio-volume-medium-symbolic', 14);
+    const volume = dragBar('dynamic-island-volume', payload?.volume ?? 0, {
+        onCommit: next => root._payload?.setVolume?.(next),
+        onPreview: next => {
+            volIcon.icon_name = volumeIconName(next, Kind.VOLUME);
+        },
+    });
+    volumeRow.add_child(volIcon);
+    volumeRow.add_child(volume);
+    volumeRow.visible = payload?.hasVolume === true;
+    if (payload?.hasVolume === true)
+        volIcon.icon_name = volumeIconName(payload?.volume, Kind.VOLUME);
+    root.add_child(volumeRow);
 
     root.update = data => {
         root._payload = data;
@@ -454,10 +632,19 @@ export function buildMediaExpanded(payload) {
         title.text = data?.title || 'Not playing';
         artist.text = data?.artist || '';
         play.setIconName(mediaPlayIcon(data?.playing === true));
+        eq.setPlaying(data?.playing === true);
         const length = data?.lengthUs ?? 0;
-        seek.setLevel(length > 0 ? (data.positionUs ?? 0) / length : 0);
-        elapsed.text = formatClockUs(data?.positionUs);
-        remaining.text = length > 0 ? formatClockUs(length) : '0:00';
+        if (!seek.dragging) {
+            seek.setLevel(length > 0 ? (data.positionUs ?? 0) / length : 0);
+            elapsed.text = formatMediaClockUs(data?.positionUs);
+            remaining.text = formatMediaRemainingUs(data?.positionUs, length);
+        }
+        const showVolume = data?.hasVolume === true;
+        volumeRow.visible = showVolume;
+        if (showVolume && !volume.dragging) {
+            volume.setLevel(data.volume ?? 0);
+            volIcon.icon_name = volumeIconName(data.volume, Kind.VOLUME);
+        }
     };
     return root;
 }

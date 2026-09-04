@@ -49,8 +49,12 @@ const PlayerIface = `
     <property name="CanGoNext" type="b" access="read"/>
     <property name="CanGoPrevious" type="b" access="read"/>
     <property name="CanPlay" type="b" access="read"/>
+    <property name="Volume" type="d" access="readwrite"/>
   </interface>
 </node>`;
+
+const SEEK_HOLD_US = 1_000_000;
+const VOLUME_HOLD_US = 400_000;
 
 const DBusProxy = Gio.DBusProxy.makeProxyWrapper(DBusIface);
 const AppProxy = Gio.DBusProxy.makeProxyWrapper(AppIface);
@@ -105,6 +109,10 @@ class Player {
         this.lengthUs = 0;
         this.positionUs = 0;
         this.trackId = '';
+        this.hasVolume = false;
+        this.volume = null;
+        this._seekHoldUntil = 0;
+        this._volumeHoldUntil = 0;
 
         this._proxy = new PlayerProxy(
             Gio.DBus.session,
@@ -149,11 +157,49 @@ class Player {
     }
 
     _readPosition() {
+        let reported;
         try {
-            this.positionUs = Number(this._proxy.Position ?? 0);
+            reported = Number(this._proxy.Position ?? 0);
         } catch {
-            this.positionUs = this.positionUs || 0;
+            reported = this.positionUs || 0;
         }
+        if (this._seekHoldUntil && GLib.get_monotonic_time() < this._seekHoldUntil) {
+            if (Math.abs(reported - this.positionUs) < 2_000_000)
+                this.positionUs = reported;
+            return;
+        }
+        this.positionUs = reported;
+    }
+
+    _volumeFromProxy() {
+        try {
+            const names = this._proxy.get_cached_property_names?.();
+            const list = names ? Array.from(names) : [];
+            if (list.length && !list.includes('Volume'))
+                return {present: false};
+            const cached = this._proxy.get_cached_property?.('Volume');
+            if (cached == null)
+                return {present: false};
+            const value = Number(cached.deep_unpack?.() ?? cached.unpack());
+            if (!Number.isFinite(value))
+                return {present: false};
+            return {present: true, value};
+        } catch {
+            return {present: false};
+        }
+    }
+
+    _readVolume() {
+        if (this._volumeHoldUntil && GLib.get_monotonic_time() < this._volumeHoldUntil)
+            return;
+        const found = this._volumeFromProxy();
+        if (!found.present) {
+            this.hasVolume = false;
+            this.volume = null;
+            return;
+        }
+        this.hasVolume = true;
+        this.volume = Math.max(0, Math.min(1, found.value));
     }
 
     _update() {
@@ -163,12 +209,16 @@ class Player {
         this.title = typeof metadata['xesam:title'] === 'string' ? metadata['xesam:title'] : '';
         this.artUrl = typeof metadata['mpris:artUrl'] === 'string' ? metadata['mpris:artUrl'] : '';
         this.lengthUs = Number(metadata['mpris:length'] ?? 0) || 0;
-        this.trackId = typeof metadata['mpris:trackid'] === 'string' ? metadata['mpris:trackid'] : '';
+        const trackId = typeof metadata['mpris:trackid'] === 'string' ? metadata['mpris:trackid'] : '';
+        if (trackId !== this.trackId)
+            this._seekHoldUntil = 0;
+        this.trackId = trackId;
         this.status = this._proxy.PlaybackStatus ?? 'Stopped';
         this.canPlay = !!this._proxy.CanPlay;
         this.canGoNext = !!this._proxy.CanGoNext;
         this.canGoPrevious = !!this._proxy.CanGoPrevious;
         this._readPosition();
+        this._readVolume();
         this._onChange?.(this);
     }
 
@@ -192,12 +242,32 @@ class Player {
         if (!(this.lengthUs > 0))
             return;
         const pos = Math.round(Math.max(0, Math.min(1, frac)) * this.lengthUs);
+        const from = this.positionUs || 0;
         const trackId = this.trackId || '/org/mpris/MediaPlayer2/TrackList/NoTrack';
+        this.positionUs = pos;
+        this._seekHoldUntil = GLib.get_monotonic_time() + SEEK_HOLD_US;
+        this._onChange?.(this);
         this._proxy.SetPositionAsync(trackId, pos).catch(() => {
-            const delta = pos - (this.positionUs || 0);
+            const delta = pos - from;
+            if (!delta)
+                return;
             this._proxy.SeekAsync(delta).catch(() => {});
         });
-        this.positionUs = pos;
+    }
+
+    setVolume(level) {
+        if (!this.hasVolume)
+            return;
+        const value = Math.max(0, Math.min(1, Number(level)));
+        if (!Number.isFinite(value))
+            return;
+        this.volume = value;
+        this._volumeHoldUntil = GLib.get_monotonic_time() + VOLUME_HOLD_US;
+        try {
+            this._proxy.Volume = value;
+        } catch {
+            // player rejected the write
+        }
         this._onChange?.(this);
     }
 
@@ -328,10 +398,13 @@ export class MprisSource {
                 playing: player.playing,
                 lengthUs: player.lengthUs,
                 positionUs: player.positionUs,
+                hasVolume: player.hasVolume === true,
+                volume: player.hasVolume ? player.volume : null,
                 playPause: () => player.playPause(),
                 next: () => player.next(),
                 previous: () => player.previous(),
                 seek: frac => player.seekFraction(frac),
+                setVolume: level => player.setVolume(level),
             },
         });
     }

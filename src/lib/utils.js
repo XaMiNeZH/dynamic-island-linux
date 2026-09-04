@@ -101,6 +101,20 @@ export function classifyOsd(icon, label) {
     return 'volume';
 }
 
+export function formatMediaClockUs(us) {
+    const sec = Math.max(0, Math.round(Number(us ?? 0) / 1_000_000));
+    const minutes = Math.floor(sec / 60);
+    const seconds = sec % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+export function formatMediaRemainingUs(positionUs, lengthUs) {
+    if (!(Number(lengthUs) > 0))
+        return '-0:00';
+    const leftover = Math.max(0, Number(lengthUs) - Number(positionUs ?? 0));
+    return `-${formatMediaClockUs(leftover)}`;
+}
+
 export function formatClock(dateTime, {use24h, showSeconds}) {
     if (use24h) {
         return showSeconds

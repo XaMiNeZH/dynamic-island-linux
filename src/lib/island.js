@@ -44,7 +44,7 @@ export const Island = GObject.registerClass({
             x_expand: false,
             y_expand: false,
         });
-        this._capsule.clip_to_allocation = true;
+        this._capsule.clip_to_allocation = false;
         this._capsule.set_pivot_point(0.5, 0);
         this._capsule.accessible_role = Atk.Role.PUSH_BUTTON;
         this._capsule.accessible_name = extension.gettext('Dynamic Island');
@@ -123,6 +123,10 @@ export const Island = GObject.registerClass({
             if (actor.has_style_class_name?.('is-compact-play'))
                 return true;
             if (actor.has_style_class_name?.('dynamic-island-seek'))
+                return true;
+            if (actor.has_style_class_name?.('dynamic-island-volume'))
+                return true;
+            if (actor.has_style_class_name?.('dynamic-island-slider'))
                 return true;
             if (actor === this._capsule)
                 break;

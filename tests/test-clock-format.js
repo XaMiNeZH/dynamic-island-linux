@@ -3,7 +3,7 @@
 
 import GLib from 'gi://GLib';
 
-import {formatClock, classifyOsd} from '../src/lib/utils.js';
+import {formatClock, classifyOsd, formatMediaClockUs, formatMediaRemainingUs} from '../src/lib/utils.js';
 
 let passed = 0;
 let failed = 0;
@@ -30,6 +30,12 @@ assert(/AM|PM/i.test(h12), `12h includes meridiem: ${h12}`);
 assert(classifyOsd({names: ['display-brightness-symbolic']}, '') === 'brightness', 'brightness icon');
 assert(classifyOsd({names: ['audio-volume-high-symbolic']}, 'Volume') === 'volume', 'volume icon');
 assert(classifyOsd({iconName: 'microphone-sensitivity-muted-symbolic'}, 'Microphone') === 'mute', 'mic icon');
+
+assert(formatMediaClockUs(0) === '0:00', 'zero media clock');
+assert(formatMediaClockUs(65_000_000) === '1:05', 'media clock minutes');
+assert(formatMediaRemainingUs(12_000_000, 120_000_000) === '-1:48', 'leftover time is negative');
+assert(formatMediaRemainingUs(0, 0) === '-0:00', 'missing duration leftover');
+assert(formatMediaRemainingUs(120_000_000, 120_000_000) === '-0:00', 'track end leftover');
 
 print(`clock-format: ${passed} passed, ${failed} failed`);
 if (failed)
