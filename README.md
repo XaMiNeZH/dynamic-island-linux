@@ -90,7 +90,23 @@ fc-list : family | grep -i 'sf pro'
 
 Then open a **new** nested Shell (`./tools/try.sh`). `disable` / `enable` will not pick up a newly installed font in the current process. Optional system fallback: `sudo dnf install google-inter-fonts`.
 
-The Cloud Agent environment cannot run Mutter. Visual checks happen on a Fedora GNOME session. Headless tests cover the activity stack, motion math, geometry fit, panel-media matching, and clock/OSD classification.
+### Cloud Agent visual smoke test
+
+The Cloud Agent has no host Wayland session, GPU, KMS device, or systemd-logind, so it cannot run the Fedora `mutter-devkit` workflow directly. Its configured test environment instead runs a real software-rendered compositor chain:
+
+```text
+Xvfb → Weston (Pixman) → nested GNOME Shell/Mutter
+```
+
+Run the isolated smoke test and inspect the saved screenshot:
+
+```bash
+./tools/cloud-try.sh /tmp/dynamic-island-visual
+```
+
+It writes `nested-shell.png`, the Shell log, and extension state to that directory; it does not change the repository metadata or your desktop settings. Ubuntu 24.04 provides GNOME 46, while this extension targets GNOME 49–51, so the script adds `46` **only to its temporary extension copy** to exercise the actual `St`/`Clutter` visual path. This is a compositor and rendering smoke test, not GNOME 50 compatibility validation. Test media, hardware OSD, BlueZ, UPower, and the final target versions on Fedora GNOME as well.
+
+The regular headless tests cover the activity stack, motion math, geometry fit, panel-media matching, and clock/OSD classification.
 
 ## Why not the other islands
 
