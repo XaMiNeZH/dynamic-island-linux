@@ -3,14 +3,11 @@
 
 import {Geometry} from '../src/lib/constants.js';
 import {
-    SQUIRCLE_N,
     chromeAllocation,
     chromePad,
     paintIslandChrome,
     pointInChrome,
-    pointInStadium,
-    pointInSuperellipse,
-    superellipsePoint,
+    pointInRoundedRect,
 } from '../src/lib/squircle.js';
 
 let passed = 0;
@@ -25,31 +22,29 @@ function assert(cond, message) {
     print(`FAIL: ${message}`);
 }
 
-assert(SQUIRCLE_N === 5, 'expanded chrome uses squircle n=5');
-assert(chromePad(Geometry.idle) === 3, 'compact pad is small');
-assert(chromePad(Geometry.mediaExpanded) === 10, 'expanded pad leaves room for shadow');
+assert(chromePad(Geometry.idle) === 0, 'compact chrome reserves no shadow padding');
+assert(chromePad(Geometry.mediaExpanded) === 0, 'expanded chrome reserves no shadow padding');
 
 const idleAlloc = chromeAllocation(Geometry.idle);
-assert(idleAlloc.width === Geometry.idle.width + 6, 'idle actor includes pad');
-assert(idleAlloc.height === Geometry.idle.height + 6, 'idle actor height includes pad');
+assert(idleAlloc.width === Geometry.idle.width, 'idle allocation matches visible pill');
+assert(idleAlloc.height === Geometry.idle.height, 'idle allocation matches visible pill');
 
 const box = {x: 0, y: 0, w: 200, h: 100};
-assert(pointInSuperellipse(100, 50, box.x, box.y, box.w, box.h), 'squircle center is inside');
-assert(!pointInSuperellipse(0, 0, box.x, box.y, box.w, box.h, 5),
-    'squircle sharp corner is outside');
-assert(pointInStadium(10, 17, 0, 0, 88, 34), 'stadium left cap is inside');
-assert(!pointInStadium(0, 0, 0, 0, 88, 34), 'stadium corner is outside');
-
-const p = superellipsePoint(0, 0, 10, 10, 0, 5);
-assert(Math.abs(p.x - 10) < 1e-6, 'superellipse at 0 is on the +x vertex');
+assert(pointInRoundedRect(100, 50, box.x, box.y, box.w, box.h, 36),
+    'round-rect center is inside');
+assert(!pointInRoundedRect(0, 0, box.x, box.y, box.w, box.h, 36),
+    'round-rect sharp corner is outside');
+assert(pointInRoundedRect(36, 0, box.x, box.y, box.w, box.h, 36),
+    'round-rect retains its straight top edge');
 
 const compact = {...Geometry.idle};
-assert(pointInChrome(3 + 44, 3 + 17, compact), 'compact hit-test center');
-assert(!pointInChrome(0, 0, compact), 'compact hit-test misses pad corner');
+assert(pointInChrome(44, 17, compact), 'compact stadium hit-test center');
+assert(!pointInChrome(0, 0, compact), 'compact stadium misses corner');
 
 const expanded = {...Geometry.mediaExpanded};
-assert(pointInChrome(10 + 260, 10 + 73, expanded), 'expanded hit-test center');
-assert(!pointInChrome(10, 10, expanded), 'expanded squircle misses the box corner');
+assert(pointInChrome(260, 73, expanded), 'expanded round-rect hit-test center');
+assert(!pointInChrome(0, 0, expanded), 'expanded round-rect misses corner');
+assert(pointInChrome(36, 0, expanded), 'expanded hit-test follows radius 36');
 
 try {
     const cairo = (await import('gi://cairo')).default;
@@ -59,9 +54,9 @@ try {
     paintIslandChrome(cr, 80, 50, Geometry.mediaExpanded);
     assert(true, 'chrome paint does not throw');
 } catch (error) {
-    print(`squircle cairo skip: ${error.message}`);
+    print(`chrome cairo skip: ${error.message}`);
 }
 
-print(`squircle: ${passed} passed, ${failed} failed`);
+print(`chrome: ${passed} passed, ${failed} failed`);
 if (failed)
     throw new Error(`${failed} assertion(s) failed`);

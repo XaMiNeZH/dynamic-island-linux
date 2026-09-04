@@ -5,6 +5,7 @@ import GLib from 'gi://GLib';
 
 import {Kind} from '../activity-stack.js';
 import {SourceTracker} from '../utils.js';
+import {OutputVolume, selectVolumeControl} from './output-volume.js';
 
 const MPRIS_PREFIX = 'org.mpris.MediaPlayer2.';
 
@@ -53,12 +54,24 @@ const PlayerIface = `
   </interface>
 </node>`;
 
+const PropertiesIface = `
+<node>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg type="s" direction="in" name="interface_name"/>
+      <arg type="s" direction="in" name="property_name"/>
+      <arg type="v" direction="out" name="value"/>
+    </method>
+  </interface>
+</node>`;
+
 const SEEK_HOLD_US = 1_000_000;
 const VOLUME_HOLD_US = 400_000;
 
 const DBusProxy = Gio.DBusProxy.makeProxyWrapper(DBusIface);
 const AppProxy = Gio.DBusProxy.makeProxyWrapper(AppIface);
 const PlayerProxy = Gio.DBusProxy.makeProxyWrapper(PlayerIface);
+const PropertiesProxy = Gio.DBusProxy.makeProxyWrapper(PropertiesIface);
 
 function unpackMetadata(raw) {
     const metadata = {};
@@ -113,6 +126,9 @@ class Player {
         this.volume = null;
         this._seekHoldUntil = 0;
         this._volumeHoldUntil = 0;
+        this._positionEpoch = 0;
+        this._hasPosition = false;
+        this._positionRequest = false;
 
         this._proxy = new PlayerProxy(
             Gio.DBus.session,
@@ -131,6 +147,11 @@ class Player {
             busName,
             '/org/mpris/MediaPlayer2',
             () => this._loadAppIcon());
+        this._properties = new PropertiesProxy(
+            Gio.DBus.session,
+            busName,
+            '/org/mpris/MediaPlayer2',
+            () => {});
     }
 
     _ready() {
@@ -157,18 +178,47 @@ class Player {
     }
 
     _readPosition() {
+        // Position is not required to emit PropertiesChanged. A proxy cache is
+        // useful only for the initial value; refreshPosition() below performs
+        // real D-Bus reads while playing.
+        if (this._hasPosition)
+            return;
         let reported;
         try {
             reported = Number(this._proxy.Position ?? 0);
         } catch {
             reported = this.positionUs || 0;
         }
-        if (this._seekHoldUntil && GLib.get_monotonic_time() < this._seekHoldUntil) {
-            if (Math.abs(reported - this.positionUs) < 2_000_000)
-                this.positionUs = reported;
+        if (this._seekHoldUntil && GLib.get_monotonic_time() < this._seekHoldUntil)
             return;
-        }
         this.positionUs = reported;
+        this._hasPosition = true;
+    }
+
+    refreshPosition() {
+        if (this._positionRequest || !this._properties)
+            return;
+        this._positionRequest = true;
+        const epoch = this._positionEpoch;
+        this._properties.GetAsync('org.mpris.MediaPlayer2.Player', 'Position')
+            .then(([value]) => {
+                if (epoch !== this._positionEpoch ||
+                    GLib.get_monotonic_time() < this._seekHoldUntil)
+                    return;
+                const unpacked = value?.deepUnpack?.() ?? value?.unpack?.() ?? value;
+                const position = Number(unpacked);
+                if (!Number.isFinite(position))
+                    return;
+                this.positionUs = Math.max(0, position);
+                this._hasPosition = true;
+                this._onChange?.(this);
+            })
+            .catch(() => {
+                // Some minimal MPRIS implementations expose no Position.
+            })
+            .finally(() => {
+                this._positionRequest = false;
+            });
     }
 
     _volumeFromProxy() {
@@ -210,9 +260,12 @@ class Player {
         this.artUrl = typeof metadata['mpris:artUrl'] === 'string' ? metadata['mpris:artUrl'] : '';
         this.lengthUs = Number(metadata['mpris:length'] ?? 0) || 0;
         const trackId = typeof metadata['mpris:trackid'] === 'string' ? metadata['mpris:trackid'] : '';
-        if (trackId !== this.trackId)
+        const trackChanged = trackId !== this.trackId;
+        if (trackChanged)
             this._seekHoldUntil = 0;
         this.trackId = trackId;
+        if (trackChanged)
+            this._hasPosition = false;
         this.status = this._proxy.PlaybackStatus ?? 'Stopped';
         this.canPlay = !!this._proxy.CanPlay;
         this.canGoNext = !!this._proxy.CanGoNext;
@@ -246,6 +299,8 @@ class Player {
         const trackId = this.trackId || '/org/mpris/MediaPlayer2/TrackList/NoTrack';
         this.positionUs = pos;
         this._seekHoldUntil = GLib.get_monotonic_time() + SEEK_HOLD_US;
+        this._positionEpoch++;
+        this._hasPosition = true;
         this._onChange?.(this);
         this._proxy.SetPositionAsync(trackId, pos).catch(() => {
             const delta = pos - from;
@@ -278,6 +333,7 @@ class Player {
             this._proxy.disconnect(this._ownerId);
         this._proxy = null;
         this._app = null;
+        this._properties = null;
     }
 }
 
@@ -287,6 +343,7 @@ export class MprisSource {
         this._settings = settings;
         this._tracker = new SourceTracker();
         this._players = new Map();
+        this._output = new OutputVolume(() => this._publish());
 
         this._tracker.connect(settings, 'changed::enable-media', () => this._publish());
 
@@ -352,14 +409,13 @@ export class MprisSource {
 
     _ensurePositionTimer(active) {
         if (active && !this._posId) {
-            this._posId = this._tracker.timeoutAdd(1000, () => {
+            this._posId = this._tracker.timeoutAdd(500, () => {
                 const player = this._active();
                 if (!player || !player.playing) {
                     this._publish();
                     return GLib.SOURCE_CONTINUE;
                 }
-                player._readPosition();
-                this._publish();
+                player.refreshPosition();
                 return GLib.SOURCE_CONTINUE;
             });
             return;
@@ -385,6 +441,7 @@ export class MprisSource {
         }
 
         this._ensurePositionTimer(true);
+        const volume = selectVolumeControl(this._output, player);
         this._stack.upsert({
             id: 'media',
             kind: Kind.MEDIA,
@@ -398,13 +455,13 @@ export class MprisSource {
                 playing: player.playing,
                 lengthUs: player.lengthUs,
                 positionUs: player.positionUs,
-                hasVolume: player.hasVolume === true,
-                volume: player.hasVolume ? player.volume : null,
+                hasVolume: volume.hasVolume,
+                volume: volume.volume,
                 playPause: () => player.playPause(),
                 next: () => player.next(),
                 previous: () => player.previous(),
                 seek: frac => player.seekFraction(frac),
-                setVolume: level => player.setVolume(level),
+                setVolume: level => volume.setVolume(level),
             },
         });
     }
@@ -420,6 +477,8 @@ export class MprisSource {
         for (const player of this._players.values())
             player.destroy();
         this._players.clear();
+        this._output?.destroy();
+        this._output = null;
         this._tracker.destroy();
         this._stack.remove('media');
         this._stack = null;

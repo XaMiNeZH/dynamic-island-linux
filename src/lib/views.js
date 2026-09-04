@@ -22,6 +22,7 @@ import {
     formatMediaClockUs,
     formatMediaRemainingUs,
     playbackNeedsResync,
+    progressFillWidth,
 } from './utils.js';
 import {
     BAR_COUNT,
@@ -280,24 +281,23 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
     let capturedId = 0;
     let last = pct;
 
-    const railWidth = () => Math.max(1, track.width || rail.width || 148);
+    const railWidth = () => Math.max(0, track.width || rail.width || 0);
 
     const apply = (next, animate) => {
         const n = Math.max(0, Math.min(1, next ?? 0));
         last = n;
-        const width = Math.round(n * railWidth());
+        const width = progressFillWidth(n, railWidth());
         fill.remove_all_transitions();
         fill.visible = width > 0;
-        const target = width > 0 ? Math.max(6, width) : 0;
         if (animate && width > 0) {
             fill.ease({
-                width: target,
+                width,
                 duration: 120,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
             return n;
         }
-        fill.width = target;
+        fill.width = width;
         return n;
     };
 
@@ -754,12 +754,15 @@ function volumeOutput(payload, getPayload) {
         child: glyphActor(volumeGlyph(payload?.volume), 16),
     });
 
-    const setLevel = level => {
+    let level = Math.max(0, Math.min(1, Number(payload?.volume) || 0));
+    const setLevel = next => {
+        level = Math.max(0, Math.min(1, Number(next) || 0));
         button.child.setGlyph(volumeGlyph(level));
     };
 
     const commit = next => {
         const value = Math.max(0, Math.min(1, next));
+        level = value;
         getPayload()?.setVolume?.(value);
         setLevel(value);
     };
@@ -779,7 +782,7 @@ function volumeOutput(payload, getPayload) {
         } catch {
             return Clutter.EVENT_STOP;
         }
-        commit((getPayload()?.volume ?? 0) + delta);
+        commit(level + delta);
         return Clutter.EVENT_STOP;
     });
 
@@ -821,7 +824,7 @@ function volumeOutput(payload, getPayload) {
             return Clutter.EVENT_PROPAGATE;
         dragging = true;
         startY = eventY(event);
-        startVol = getPayload()?.volume ?? 0;
+        startVol = level;
         stopCapture();
         capturedId = connectStage('captured-event', onCaptured);
         return Clutter.EVENT_STOP;
@@ -995,12 +998,6 @@ export function buildMediaExpanded(payload) {
     root.add_child(col);
 
     const refreshPalette = attachPalette(eq, payload?.artUrl);
-    attachPalette({
-        setPalette: pal => {
-            artGlow.style =
-                `background-color: ${mixHex(pal.primary, '#000000', 0.62)}; border-radius: 16px;`;
-        },
-    }, payload?.artUrl);
 
     let tickId = 0;
     const paintClock = () => {

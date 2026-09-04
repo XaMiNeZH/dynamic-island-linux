@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import GLib from 'gi://GLib';
-import Pango from 'gi://Pango';
+import PangoCairo from 'gi://PangoCairo';
 
 const FONT_FILES = ['Inter-Regular.ttf', 'Inter-SemiBold.ttf'];
 
@@ -100,18 +100,13 @@ export function listSystemFamilies() {
         }
     };
 
+    // St renders with the PangoCairo map. Query it directly rather than the
+    // abstract Pango.FontMap or the legacy global `imports` object, both of
+    // which can be absent in GJS ESM.
     try {
-        add(namesFromFontMap(Pango.FontMap.get_default()));
+        add(namesFromFontMap(PangoCairo.FontMap.get_default()));
     } catch {
-        // FontMap.get_default is missing on some Pango builds
-    }
-
-    if (!names.length) {
-        try {
-            add(namesFromFontMap(globalThis.imports?.gi?.PangoCairo?.font_map_get_default?.()));
-        } catch {
-            // PangoCairo typelib not loaded
-        }
+        // A usable fontconfig list below still gives us a deterministic stack.
     }
 
     add(listFcListFamilies());
@@ -120,8 +115,11 @@ export function listSystemFamilies() {
 
 export function typeStack(optical = 'display') {
     const family = optical === 'text' ? islandType.text : islandType.display;
-    const quoted = family.includes(' ') ? `"${family}"` : family;
-    return `${quoted}, Inter, "Adwaita Sans", sans-serif`;
+    // St's CSS parser accepts quoted family names, but accepting a fallback
+    // list differs across Shell releases. The resolver only returns a family
+    // registered by Pango/fontconfig, so give St that exact family and let
+    // Pango perform its normal glyph fallback.
+    return `"${String(family).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 export function typeCss(optical = 'display') {
@@ -172,4 +170,5 @@ export function registerIslandFonts(extensionDir) {
     const resolved = resolveIslandFonts(listSystemFamilies());
     islandType.display = resolved.display;
     islandType.text = resolved.text;
+    return resolved;
 }

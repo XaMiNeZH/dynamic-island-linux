@@ -18,6 +18,7 @@ import {
 import {
     displayedPlaybackUs,
     playbackNeedsResync,
+    progressFillWidth,
 } from '../src/lib/utils.js';
 import {Geometry} from '../src/lib/constants.js';
 
@@ -94,6 +95,9 @@ assert(capped === 120_000_000, 'clock stops at duration');
 
 assert(!playbackNeedsResync(10_000_000, 10_400_000), 'small drift does not resync');
 assert(playbackNeedsResync(10_000_000, 13_000_000), 'a seek resyncs the clock');
+assert(progressFillWidth(0.5, 320) === 160, 'seek fill uses allocated rail width');
+assert(progressFillWidth(0.125, 320) === 40, 'seek fill advances before playback ends');
+assert(progressFillWidth(1.4, 320) === 320, 'seek fill is capped at rail width');
 
 assert(Geometry.mediaExpanded.width === 520, 'expanded media matches the wide notch panel');
 assert(Geometry.mediaExpanded.height === 146, 'expanded media is 146 tall');

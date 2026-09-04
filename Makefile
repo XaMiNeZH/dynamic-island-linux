@@ -18,6 +18,7 @@ test:
 	gjs --module tests/test-squircle.js
 	gjs --module tests/test-glyphs.js
 	gjs --module tests/test-media-style.js
+	gjs --module tests/test-output-volume.js
 	gjs --module tests/test-panel-media.js
 
 check: schemas test

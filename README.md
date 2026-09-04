@@ -81,7 +81,7 @@ make zip      # pack dynamic-island@xaminezh.xyz.shell-extension.zip
 
 GJS caches extension modules for the life of the `gnome-shell` process. `disable` / `enable` re-runs `enable()` but does **not** pick up file edits. A nested window (`./tools/try.sh`) is a new process, so it loads the files you just installed.
 
-After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + a 6-bar waveform, hover pause is a **filled** mark that toggles playback, and clicking the empty pill expands a **squircle** now-playing panel (not a CSS round-rect) with large art, SF Pro if installed, capsule seek, filled transport, and a speaker on the right. Volume should look like a thick island HUD, not GNOME’s leftover bar. No square shadow around the pill.
+After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + a 6-bar waveform, hover pause is a **filled** mark that toggles playback, and clicking the empty pill expands a 520×146 **rounded rectangle** (36px corners, not a squircle) with large art, SF Pro if installed, a live capsule seek rail, filled transport, and a speaker on the far right. The speaker changes GNOME’s default output volume when Gvc is available, with MPRIS player volume only as a fallback. No square shadow or halo may appear around the pill.
 
 Typography uses **SF Pro Display** (titles) and **SF Pro Text** (times, HUD, artist) when fontconfig can see them, otherwise bundled **Inter**. Check the names your copy registered:
 

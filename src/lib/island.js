@@ -16,7 +16,7 @@ import {
     fitGeometryToPanel,
     isExpandedGeometry,
 } from './constants.js';
-import {islandType} from './fonts.js';
+import {typeStack} from './fonts.js';
 import {sameGeometry, springProgress} from './motion.js';
 import {
     chromeAllocation,
@@ -100,11 +100,9 @@ export const Island = GObject.registerClass({
     }
 
     _applyChromeStyle() {
-        const display = islandType.display || 'Inter';
-        const quoted = display.includes(' ') ? `"${display}"` : display;
         this._capsule.style =
             `background-color: transparent; border-radius: 0; box-shadow: none; ` +
-            `font-family: ${quoted}, Inter, "Adwaita Sans", sans-serif;`;
+            `font-family: ${typeStack('display')};`;
     }
 
     _onRepaint(area) {
