@@ -47,7 +47,7 @@ Disable restores notification banners, the stock OSD, and any panel media-contro
 | Idle | Small empty black notch; tap for a bounce, right-click for calendar |
 | Notification | Pill springs into a card; click opens the app |
 | Media (compact) | Album art (or the player icon) and sound waves |
-| Media (hover) | Same compact pill, play/pause instead of waves |
+| Media (hover) | Same compact pill, small symbolic play/pause that actually toggles |
 | Media (expanded) | Click opens a now-playing card with skip, seek, and play/pause |
 | Volume / brightness / mute | Island takes over the GNOME OSD |
 | Charging | Percentage when you plug in |
@@ -79,7 +79,7 @@ make zip      # pack dynamic-island@xaminezh.xyz.shell-extension.zip
 
 GJS caches extension modules for the life of the `gnome-shell` process. `disable` / `enable` re-runs `enable()` but does **not** pick up file edits. A nested window (`./tools/try.sh`) is a new process, so it loads the files you just installed.
 
-After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + waves, hover shows play/pause, and click expands the card.
+After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + waves, hover pause is small and toggles playback, and clicking the empty pill expands a black now-playing card.
 
 The Cloud Agent environment cannot run Mutter. Visual checks happen on a Fedora GNOME session. Headless tests cover the activity stack, motion math, geometry fit, panel-media matching, and clock/OSD classification.
 

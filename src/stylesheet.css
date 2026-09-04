@@ -4,24 +4,22 @@
     background-color: #000000;
     border-radius: 17px;
     color: #f5f5f7;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
 .dynamic-island-capsule.is-hover {
-    background-color: #0a0a0a;
+    background-color: #000000;
 }
 
 .dynamic-island-capsule.is-expanded {
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42),
-                inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
 }
 
 .dynamic-island-content {
-    padding: 0 11px;
+    padding: 0 10px;
 }
 
 .dynamic-island-capsule.is-expanded .dynamic-island-content {
-    padding: 12px 16px;
+    padding: 14px 16px 12px;
 }
 
 .dynamic-island-clock {
@@ -34,13 +32,13 @@
 
 .dynamic-island-title {
     font-weight: 600;
-    font-size: 13px;
+    font-size: 15px;
     color: #ffffff;
 }
 
 .dynamic-island-subtitle {
-    font-size: 11.5px;
-    color: rgba(255, 255, 255, 0.58);
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.60);
 }
 
 .dynamic-island-osd-label {
@@ -56,7 +54,7 @@
 }
 
 .dynamic-island-slot {
-    min-width: 28px;
+    min-width: 22px;
 }
 
 .dynamic-island-row {
@@ -64,8 +62,8 @@
 }
 
 .dynamic-island-text-col {
-    spacing: 2px;
-    padding-left: 4px;
+    spacing: 3px;
+    padding-left: 2px;
 }
 
 .dynamic-island-icon {
@@ -73,59 +71,59 @@
 }
 
 .dynamic-island-art-clip {
-    border-radius: 7px;
-    background-color: #1c1c1e;
+    border-radius: 12px;
+    background-color: transparent;
 }
 
 .dynamic-island-idle .dynamic-island-art-clip,
 .dynamic-island-split .dynamic-island-art-clip {
-    border-radius: 11px;
+    border-radius: 8px;
 }
 
 .dynamic-island-icon-button {
-    width: 30px;
-    height: 30px;
-    border-radius: 15px;
-    background-color: rgba(255, 255, 255, 0.08);
+    width: 32px;
+    height: 32px;
+    border-radius: 16px;
+    background-color: transparent;
     padding: 4px;
     color: #ffffff;
 }
 
 .dynamic-island-icon-button:hover {
-    background-color: rgba(255, 255, 255, 0.16);
+    background-color: rgba(255, 255, 255, 0.12);
 }
 
 .dynamic-island-icon-button:active {
-    background-color: rgba(255, 255, 255, 0.24);
-}
-
-.dynamic-island-icon-button.is-play {
-    width: 36px;
-    height: 36px;
-    border-radius: 18px;
-    background-color: #ffffff;
-    color: #000000;
-}
-
-.dynamic-island-icon-button.is-play:hover {
-    background-color: #f2f2f2;
+    background-color: rgba(255, 255, 255, 0.20);
 }
 
 .dynamic-island-icon-button.is-compact-play {
-    width: 22px;
-    height: 22px;
-    border-radius: 11px;
-    padding: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    padding: 0;
+    background-color: transparent;
+    color: #ffffff;
+}
+
+.dynamic-island-icon-button.is-compact-play:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.dynamic-island-icon-button.is-transport-play {
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
 }
 
 .dynamic-island-controls {
-    spacing: 14px;
-    padding-top: 8px;
+    spacing: 16px;
+    padding-top: 6px;
 }
 
 .dynamic-island-seek-row {
     spacing: 8px;
-    padding-top: 8px;
+    padding-top: 10px;
 }
 
 .dynamic-island-seek-time {
@@ -135,7 +133,7 @@
 }
 
 .dynamic-island-seek {
-    min-width: 140px;
+    min-width: 160px;
 }
 
 .dynamic-island-osd {
@@ -143,16 +141,16 @@
 }
 
 .dynamic-island-level {
-    background-color: rgba(255, 255, 255, 0.16);
-    border-radius: 3px;
-    min-width: 148px;
-    height: 5px;
+    background-color: rgba(255, 255, 255, 0.18);
+    border-radius: 2px;
+    min-width: 120px;
+    height: 3px;
 }
 
 .dynamic-island-level-fill {
     background-color: #ffffff;
-    border-radius: 3px;
-    height: 5px;
+    border-radius: 2px;
+    height: 3px;
 }
 
 .dynamic-island-eq {
@@ -183,13 +181,13 @@
 
 .dynamic-island-app-badge {
     border-radius: 11px;
-    background-color: #1c1c1e;
+    background-color: #111111;
 }
 
 .dynamic-island-media-expanded,
 .dynamic-island-notification,
 .dynamic-island-system {
-    spacing: 10px;
+    spacing: 4px;
 }
 
 .dynamic-island-idle {

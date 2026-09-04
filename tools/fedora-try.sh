@@ -11,7 +11,7 @@ echo "3. Clock:    the GNOME date/time stays on the panel; idle island is an emp
 echo "4. Calendar: right-click the empty notch"
 echo "5. Notify:   notify-send 'Island' 'This should morph the pill'"
 echo "6. Volume:   use the volume keys — OSD should appear on the island"
-echo "7. Media:    play something — compact is art + waves; hover play/pause; click expands"
+echo "7. Media:    art + waves; hover = small pause that toggles; click empty pill expands"
 echo "8. Charge:   plug in the laptop"
 echo "9. Disable:  gnome-extensions disable dynamic-island@xaminezh.xyz"
 echo "   The GNOME clock, banners, and OSD must come back."

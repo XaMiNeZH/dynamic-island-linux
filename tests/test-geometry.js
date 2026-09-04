@@ -67,6 +67,9 @@ assert(fitGeometryToPanel(Geometry.idle, 32, {margin: 2}).height === 28,
 assert(fitGeometryToPanel(Geometry.idle, 32, {margin: 2}).radius === 14,
     'custom margin keeps a half-capsule radius');
 
+assert(Geometry.compact.width === 148, 'compact media is wide enough for art plus pause');
+assert(Geometry.mediaExpanded.width === 360, 'expanded media card is 360 wide');
+assert(Geometry.mediaExpanded.height === 172, 'expanded media card is 172 tall');
 assert(Geometry.idle.width === 88, 'idle notch is a small empty pill');
 assert(geometryFor('idle').width === 88, 'idle geometry is the empty notch');
 assert(geometryFor('media', false).width === Geometry.compact.width, 'hover stays on compact geometry');

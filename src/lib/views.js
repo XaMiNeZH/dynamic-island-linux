@@ -157,7 +157,10 @@ function seekBar(fraction, onSeek) {
     return track;
 }
 
-function iconButton(iconName, callback, extraClass = '') {
+function iconButton(iconName, callback, extraClass = '', iconSize = null) {
+    const size = iconSize ?? (extraClass.includes('compact-play')
+        ? 14
+        : extraClass.includes('play') ? 18 : 15);
     const button = new St.Button({
         style_class: `dynamic-island-icon-button ${extraClass}`.trim(),
         reactive: true,
@@ -165,11 +168,13 @@ function iconButton(iconName, callback, extraClass = '') {
         track_hover: true,
         child: new St.Icon({
             icon_name: iconName,
-            icon_size: extraClass.includes('play') ? 18 : 15,
+            icon_size: size,
         }),
     });
-    button.connect('clicked', () => callback());
-    button.connect('button-press-event', () => Clutter.EVENT_STOP);
+    button.connect('button-press-event', () => {
+        callback();
+        return Clutter.EVENT_STOP;
+    });
     button.setIconName = name => {
         button.child.icon_name = name;
     };
@@ -328,36 +333,53 @@ function mediaPlayIcon(playing) {
 }
 
 export function buildMediaCompact(payload) {
+    const hold = {payload};
     const art = artClip(payload?.artUrl, 22);
     art.setMedia(payload);
+
+    const stack = new St.Widget({
+        style_class: 'dynamic-island-compact-trail',
+        width: 22,
+        height: 22,
+    });
     const eq = equalizer(payload?.playing === true);
-    const root = splitChrome({leading: art, trailing: eq});
+    eq.set_position(2, 4);
+    const play = iconButton(
+        mediaPlayIcon(payload?.playing === true),
+        () => hold.payload?.playPause?.(),
+        'is-compact-play',
+        14);
+    play.set_position(2, 2);
+    stack.add_child(eq);
+    stack.add_child(play);
+
+    const root = splitChrome({leading: art, trailing: stack});
+    root.add_style_class_name('dynamic-island-media-compact');
+    root.suppressHoverScale = true;
     root._payload = payload;
     root._hover = false;
 
-    const play = iconButton(
-        mediaPlayIcon(payload?.playing === true),
-        () => root._payload?.playPause?.(),
-        'is-play is-compact-play');
-
-    const showTrailing = hover => {
-        const next = hover ? play : eq;
-        const prev = root.trailing.get_child();
-        if (prev === next)
-            return;
-        root.trailing.set_child(next);
+    const showHover = hover => {
+        eq.opacity = hover ? 0 : 255;
+        eq.reactive = !hover;
+        play.opacity = hover ? 255 : 0;
+        play.reactive = !!hover;
+        play.visible = true;
+        eq.visible = true;
     };
+    showHover(false);
 
     root.setHover = hover => {
         root._hover = !!hover;
-        showTrailing(root._hover);
+        showHover(root._hover);
     };
     root.update = next => {
+        hold.payload = next;
         root._payload = next;
         art.setMedia(next);
         eq.setPlaying(next?.playing === true);
         play.setIconName(mediaPlayIcon(next?.playing === true));
-        showTrailing(root._hover);
+        showHover(root._hover);
     };
     return root;
 }
@@ -368,14 +390,15 @@ export function buildMediaExpanded(payload) {
         vertical: true,
         x_expand: true,
         y_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
+        y_align: Clutter.ActorAlign.FILL,
     });
+    root._payload = payload;
 
     const top = new St.BoxLayout({
         style_class: 'dynamic-island-row',
         x_expand: true,
     });
-    const art = artClip(payload?.artUrl, 52);
+    const art = artClip(payload?.artUrl, 56);
     art.setMedia(payload);
     top.add_child(art);
 
@@ -392,25 +415,22 @@ export function buildMediaExpanded(payload) {
     top.add_child(textCol);
     root.add_child(top);
 
-    root._payload = payload;
-    const hasSeek = (payload?.lengthUs ?? 0) > 0;
-    let seek = null;
-    let elapsed = null;
-    let remaining = null;
-    if (hasSeek) {
-        const frac = (payload.positionUs ?? 0) / payload.lengthUs;
-        const row = new St.BoxLayout({
-            style_class: 'dynamic-island-seek-row',
-            x_expand: true,
-        });
-        elapsed = label(formatClockUs(payload.positionUs), 'dynamic-island-seek-time');
-        remaining = label(formatClockUs(payload.lengthUs), 'dynamic-island-seek-time');
-        seek = seekBar(frac, next => root._payload?.seek?.(next));
-        row.add_child(elapsed);
-        row.add_child(seek);
-        row.add_child(remaining);
-        root.add_child(row);
-    }
+    const frac = (payload?.lengthUs ?? 0) > 0
+        ? (payload.positionUs ?? 0) / payload.lengthUs
+        : 0;
+    const seekRow = new St.BoxLayout({
+        style_class: 'dynamic-island-seek-row',
+        x_expand: true,
+    });
+    const elapsed = label(formatClockUs(payload?.positionUs), 'dynamic-island-seek-time');
+    const remaining = label(
+        (payload?.lengthUs ?? 0) > 0 ? formatClockUs(payload.lengthUs) : '0:00',
+        'dynamic-island-seek-time');
+    const seek = seekBar(frac, next => root._payload?.seek?.(next));
+    seekRow.add_child(elapsed);
+    seekRow.add_child(seek);
+    seekRow.add_child(remaining);
+    root.add_child(seekRow);
 
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
@@ -420,7 +440,8 @@ export function buildMediaExpanded(payload) {
     const play = iconButton(
         mediaPlayIcon(payload?.playing === true),
         () => root._payload?.playPause?.(),
-        'is-play');
+        'is-transport-play',
+        18);
     const next = iconButton('media-skip-forward-symbolic', () => root._payload?.next?.());
     controls.add_child(prev);
     controls.add_child(play);
@@ -433,13 +454,10 @@ export function buildMediaExpanded(payload) {
         title.text = data?.title || 'Not playing';
         artist.text = data?.artist || '';
         play.setIconName(mediaPlayIcon(data?.playing === true));
-        if (seek && (data?.lengthUs ?? 0) > 0) {
-            seek.setLevel((data.positionUs ?? 0) / data.lengthUs);
-            if (elapsed)
-                elapsed.text = formatClockUs(data.positionUs);
-            if (remaining)
-                remaining.text = formatClockUs(data.lengthUs);
-        }
+        const length = data?.lengthUs ?? 0;
+        seek.setLevel(length > 0 ? (data.positionUs ?? 0) / length : 0);
+        elapsed.text = formatClockUs(data?.positionUs);
+        remaining.text = length > 0 ? formatClockUs(length) : '0:00';
     };
     return root;
 }

@@ -120,6 +120,8 @@ export const Island = GObject.registerClass({
                 return true;
             if (actor.has_style_class_name?.('dynamic-island-icon-button'))
                 return true;
+            if (actor.has_style_class_name?.('is-compact-play'))
+                return true;
             if (actor.has_style_class_name?.('dynamic-island-seek'))
                 return true;
             if (actor === this._capsule)
@@ -147,18 +149,23 @@ export const Island = GObject.registerClass({
 
     _onHover() {
         const hover = this._capsule.hover;
-        this._capsule.ease({
-            scale_x: hover ? 1.03 : 1.0,
-            scale_y: hover ? 1.03 : 1.0,
-            duration: 160,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
+        const child = this._content.get_child();
+        if (child?.suppressHoverScale) {
+            this._capsule.remove_all_transitions();
+            this._capsule.scale_x = 1;
+            this._capsule.scale_y = 1;
+        } else {
+            this._capsule.ease({
+                scale_x: hover ? 1.03 : 1.0,
+                scale_y: hover ? 1.03 : 1.0,
+                duration: 160,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        }
         if (hover)
             this._capsule.add_style_class_name('is-hover');
         else
             this._capsule.remove_style_class_name('is-hover');
-
-        const child = this._content.get_child();
         child?.setHover?.(hover);
     }
 
