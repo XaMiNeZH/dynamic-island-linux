@@ -147,7 +147,7 @@ function disconnectStage(id) {
 
 function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
     const pct = Math.max(0, Math.min(1, fraction ?? 0));
-    const track = new St.BoxLayout({
+    const track = new St.Widget({
         style_class: `dynamic-island-slider ${styleClass}`.trim(),
         reactive: true,
         track_hover: true,
@@ -155,42 +155,47 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
         y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
         height: 16,
+        layout_manager: new Clutter.BinLayout(),
     });
     const rail = new St.Widget({
-        style_class: 'dynamic-island-level',
-        height: 3,
+        style_class: 'dynamic-island-seek-rail',
+        height: 2,
         x_expand: true,
-        y_expand: false,
+        x_align: Clutter.ActorAlign.FILL,
         y_align: Clutter.ActorAlign.CENTER,
     });
     const fill = new St.Widget({
-        style_class: 'dynamic-island-level-fill',
+        style_class: 'dynamic-island-seek-fill',
         height: 3,
-        width: Math.max(3, Math.round(pct * 148)),
+        x_align: Clutter.ActorAlign.START,
+        y_align: Clutter.ActorAlign.CENTER,
+        width: Math.max(0, Math.round(pct * 148)),
     });
-    rail.add_child(fill);
     track.add_child(rail);
+    track.add_child(fill);
 
     let dragging = false;
     let capturedId = 0;
     let last = pct;
 
-    const railWidth = () => Math.max(1, rail.width || track.width || 148);
+    const railWidth = () => Math.max(1, track.width || rail.width || 148);
 
     const apply = (next, animate) => {
         const n = Math.max(0, Math.min(1, next ?? 0));
         last = n;
-        const width = Math.max(3, Math.round(n * railWidth()));
+        const width = Math.round(n * railWidth());
         fill.remove_all_transitions();
-        if (animate) {
+        fill.visible = width > 0;
+        const target = Math.max(width > 0 ? 2 : 0, width);
+        if (animate && width > 0) {
             fill.ease({
-                width,
+                width: target,
                 duration: 120,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
             return n;
         }
-        fill.width = width;
+        fill.width = target;
         return n;
     };
 
@@ -259,7 +264,6 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
     });
 
     track.connect('notify::width', () => apply(last, false));
-    rail.connect('notify::width', () => apply(last, false));
     track.connect('destroy', () => {
         dragging = false;
         stopCapture();
@@ -517,22 +521,124 @@ export function buildMediaCompact(payload) {
     return root;
 }
 
+function eventY(event) {
+    try {
+        const coords = event.get_coords();
+        return coords[coords.length - 1] ?? coords[1] ?? 0;
+    } catch {
+        return 0;
+    }
+}
+
+function volumeOutput(payload, getPayload) {
+    const button = new St.Button({
+        style_class: 'dynamic-island-icon-button is-output dynamic-island-volume',
+        reactive: true,
+        can_focus: true,
+        track_hover: true,
+        x_align: Clutter.ActorAlign.END,
+        y_align: Clutter.ActorAlign.CENTER,
+        child: new St.Icon({
+            icon_name: volumeIconName(payload?.volume, Kind.VOLUME),
+            icon_size: 16,
+        }),
+    });
+
+    const setLevel = level => {
+        button.child.icon_name = volumeIconName(level, Kind.VOLUME);
+    };
+
+    const commit = next => {
+        const value = Math.max(0, Math.min(1, next));
+        getPayload()?.setVolume?.(value);
+        setLevel(value);
+    };
+
+    button.connect('scroll-event', (_actor, event) => {
+        let delta = 0;
+        try {
+            const direction = event.get_scroll_direction();
+            if (direction === Clutter.ScrollDirection.UP)
+                delta = 0.06;
+            else if (direction === Clutter.ScrollDirection.DOWN)
+                delta = -0.06;
+            else if (direction === Clutter.ScrollDirection.SMOOTH) {
+                const [, dy] = event.get_scroll_delta();
+                delta = -dy * 0.06;
+            }
+        } catch {
+            return Clutter.EVENT_STOP;
+        }
+        commit((getPayload()?.volume ?? 0) + delta);
+        return Clutter.EVENT_STOP;
+    });
+
+    let dragging = false;
+    let capturedId = 0;
+    let startY = 0;
+    let startVol = 0;
+
+    const stopCapture = () => {
+        disconnectStage(capturedId);
+        capturedId = 0;
+    };
+
+    const finish = () => {
+        dragging = false;
+        stopCapture();
+    };
+
+    const onCaptured = (_stage, event) => {
+        if (!dragging)
+            return Clutter.EVENT_PROPAGATE;
+        const type = event.type();
+        if (type === Clutter.EventType.MOTION || type === Clutter.EventType.TOUCH_UPDATE) {
+            const dy = startY - eventY(event);
+            commit(startVol + dy / 140);
+            return Clutter.EVENT_STOP;
+        }
+        if (type === Clutter.EventType.BUTTON_RELEASE ||
+            type === Clutter.EventType.TOUCH_END ||
+            type === Clutter.EventType.TOUCH_CANCEL) {
+            finish();
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
+    };
+
+    button.connect('button-press-event', (_actor, event) => {
+        if (!isPrimaryPress(event))
+            return Clutter.EVENT_PROPAGATE;
+        dragging = true;
+        startY = eventY(event);
+        startVol = getPayload()?.volume ?? 0;
+        stopCapture();
+        capturedId = connectStage('captured-event', onCaptured);
+        return Clutter.EVENT_STOP;
+    });
+
+    button.connect('destroy', finish);
+    button.setLevel = setLevel;
+    return button;
+}
+
 export function buildMediaExpanded(payload) {
     const root = new St.BoxLayout({
         style_class: 'dynamic-island-media-expanded',
         vertical: true,
         x_expand: true,
         y_expand: true,
-        y_align: Clutter.ActorAlign.FILL,
+        y_align: Clutter.ActorAlign.CENTER,
     });
     root._payload = payload;
     root.suppressHoverScale = true;
 
     const top = new St.BoxLayout({
-        style_class: 'dynamic-island-row',
+        style_class: 'dynamic-island-row dynamic-island-media-top',
         x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
     });
-    const art = artClip(payload?.artUrl, 56);
+    const art = artClip(payload?.artUrl, 52);
     art.setMedia(payload);
     top.add_child(art);
 
@@ -548,23 +654,31 @@ export function buildMediaExpanded(payload) {
     textCol.add_child(artist);
     top.add_child(textCol);
 
-    const eq = equalizer(payload?.playing === true, {accent: true});
+    const eq = equalizer(payload?.playing === true, {accent: true, bars: 5});
     top.add_child(eq);
     root.add_child(top);
 
     const lengthUs = payload?.lengthUs ?? 0;
     const positionUs = payload?.positionUs ?? 0;
     const frac = lengthUs > 0 ? positionUs / lengthUs : 0;
-    const seekRow = new St.BoxLayout({
-        style_class: 'dynamic-island-seek-row',
+
+    const seekBlock = new St.BoxLayout({
+        style_class: 'dynamic-island-seek-block',
+        vertical: true,
         x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const timeRow = new St.BoxLayout({
+        style_class: 'dynamic-island-seek-times',
+        x_expand: true,
     });
     const elapsed = label(formatMediaClockUs(positionUs), 'dynamic-island-seek-time');
     const remaining = label(
         formatMediaRemainingUs(positionUs, lengthUs),
         'dynamic-island-seek-time is-remaining');
     remaining.clutter_text.line_alignment = Pango.Alignment.RIGHT;
+    timeRow.add_child(elapsed);
+    timeRow.add_child(new St.Widget({x_expand: true, height: 1}));
+    timeRow.add_child(remaining);
 
     const previewTimes = nextFrac => {
         const length = root._payload?.lengthUs ?? 0;
@@ -577,54 +691,47 @@ export function buildMediaExpanded(payload) {
         onCommit: next => root._payload?.seek?.(next),
         onPreview: previewTimes,
     });
-    seekRow.add_child(elapsed);
-    seekRow.add_child(seek);
-    seekRow.add_child(remaining);
-    root.add_child(seekRow);
+    seekBlock.add_child(timeRow);
+    seekBlock.add_child(seek);
+    root.add_child(seekBlock);
 
+    const bottom = new St.Widget({
+        style_class: 'dynamic-island-media-bottom',
+        x_expand: true,
+        y_expand: false,
+        layout_manager: new Clutter.BinLayout(),
+    });
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
         x_align: Clutter.ActorAlign.CENTER,
-        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
     });
     const prev = iconButton(
         'media-skip-backward-symbolic',
         () => root._payload?.previous?.(),
         'is-transport-skip',
-        20);
+        18);
     const play = iconButton(
         mediaPlayIcon(payload?.playing === true),
         () => root._payload?.playPause?.(),
         'is-transport-play',
-        26);
+        24);
     const next = iconButton(
         'media-skip-forward-symbolic',
         () => root._payload?.next?.(),
         'is-transport-skip',
-        20);
+        18);
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
-    root.add_child(controls);
+    bottom.add_child(controls);
 
-    const volumeRow = new St.BoxLayout({
-        style_class: 'dynamic-island-volume-row',
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    const volIcon = icon('audio-volume-medium-symbolic', 14);
-    const volume = dragBar('dynamic-island-volume', payload?.volume ?? 0, {
-        onCommit: next => root._payload?.setVolume?.(next),
-        onPreview: next => {
-            volIcon.icon_name = volumeIconName(next, Kind.VOLUME);
-        },
-    });
-    volumeRow.add_child(volIcon);
-    volumeRow.add_child(volume);
-    volumeRow.visible = payload?.hasVolume === true;
-    if (payload?.hasVolume === true)
-        volIcon.icon_name = volumeIconName(payload?.volume, Kind.VOLUME);
-    root.add_child(volumeRow);
+    const volume = volumeOutput(payload, () => root._payload);
+    volume.x_align = Clutter.ActorAlign.END;
+    volume.y_align = Clutter.ActorAlign.CENTER;
+    volume.visible = payload?.hasVolume === true;
+    bottom.add_child(volume);
+    root.add_child(bottom);
 
     root.update = data => {
         root._payload = data;
@@ -640,11 +747,9 @@ export function buildMediaExpanded(payload) {
             remaining.text = formatMediaRemainingUs(data?.positionUs, length);
         }
         const showVolume = data?.hasVolume === true;
-        volumeRow.visible = showVolume;
-        if (showVolume && !volume.dragging) {
+        volume.visible = showVolume;
+        if (showVolume)
             volume.setLevel(data.volume ?? 0);
-            volIcon.icon_name = volumeIconName(data.volume, Kind.VOLUME);
-        }
     };
     return root;
 }

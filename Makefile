@@ -22,6 +22,9 @@ check: schemas test
 	test -f $(SRC)/prefs.js
 	test -f $(SRC)/stylesheet.css
 	test -f $(SRC)/schemas/gschemas.compiled
+	test -f $(SRC)/fonts/Inter-Regular.ttf
+	test -f $(SRC)/fonts/Inter-SemiBold.ttf
+	test -f $(SRC)/fonts/OFL.txt
 
 zip: schemas
 	rm -f $(ZIP)

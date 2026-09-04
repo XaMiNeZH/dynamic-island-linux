@@ -5,6 +5,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {ActivityStack} from './lib/activity-stack.js';
 import {ClockSource} from './lib/clock.js';
+import {registerIslandFonts} from './lib/fonts.js';
 import {Island} from './lib/island.js';
 import {hidePanelMediaControls, restorePanelMediaControls} from './lib/panel-media.js';
 import {Presenter} from './lib/presenter.js';
@@ -17,6 +18,7 @@ import {PrivacySource} from './lib/sources/privacy.js';
 
 export default class DynamicIslandExtension extends Extension {
     enable() {
+        registerIslandFonts(this.dir);
         this._settings = this.getSettings();
         this._stack = new ActivityStack();
         this._clock = new ClockSource(this._settings);

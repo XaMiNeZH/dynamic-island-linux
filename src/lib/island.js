@@ -45,6 +45,11 @@ export const Island = GObject.registerClass({
             y_expand: false,
         });
         this._capsule.clip_to_allocation = false;
+        try {
+            this._capsule.set_offscreen_redirect(Clutter.OffscreenRedirect.DISABLED);
+        } catch {
+            // older St/Clutter
+        }
         this._capsule.set_pivot_point(0.5, 0);
         this._capsule.accessible_role = Atk.Role.PUSH_BUTTON;
         this._capsule.accessible_name = extension.gettext('Dynamic Island');
@@ -59,6 +64,7 @@ export const Island = GObject.registerClass({
             y_align: Clutter.ActorAlign.FILL,
             opacity: 255,
         });
+        this._content.clip_to_allocation = false;
         this._capsule.set_child(this._content);
 
         this._capsule.connect('button-press-event', (_actor, event) => this._onPress(event));
@@ -125,6 +131,8 @@ export const Island = GObject.registerClass({
             if (actor.has_style_class_name?.('dynamic-island-seek'))
                 return true;
             if (actor.has_style_class_name?.('dynamic-island-volume'))
+                return true;
+            if (actor.has_style_class_name?.('is-output'))
                 return true;
             if (actor.has_style_class_name?.('dynamic-island-slider'))
                 return true;
@@ -407,7 +415,7 @@ export const Island = GObject.registerClass({
     }
 
     _applyRadius(radius) {
-        this._capsule.style = `border-radius: ${radius}px;`;
+        this._capsule.style = `border-radius: ${Math.max(0, radius)}px; box-shadow: none;`;
     }
 
     relayout(animate = false) {

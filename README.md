@@ -48,7 +48,7 @@ Disable restores notification banners, the stock OSD, and any panel media-contro
 | Notification | Pill springs into a card; click opens the app |
 | Media (compact) | Album art (or the player icon) and sound waves |
 | Media (hover) | Same compact pill, small symbolic play/pause that actually toggles |
-| Media (expanded) | Click opens a now-playing card with colored waves, leftover time, seek, and volume |
+| Media (expanded) | Click opens a three-row iPhone card: art/title/waves, leftover seek, centered transport, volume icon on the right |
 | Volume / brightness / mute | Island takes over the GNOME OSD |
 | Charging | Percentage when you plug in |
 | Bluetooth | Device name on connect |
@@ -79,7 +79,9 @@ make zip      # pack dynamic-island@xaminezh.xyz.shell-extension.zip
 
 GJS caches extension modules for the life of the `gnome-shell` process. `disable` / `enable` re-runs `enable()` but does **not** pick up file edits. A nested window (`./tools/try.sh`) is a new process, so it loads the files you just installed.
 
-After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + waves, hover pause is small and toggles playback, and clicking the empty pill expands a black now-playing card.
+After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + waves, hover pause is small and toggles playback, and clicking the empty pill expands a **rounded** now-playing card with times above the seek bar, centered transport, and a speaker on the right (no bottom volume slider).
+
+Typography uses **SF Pro** if you have it installed, otherwise the bundled **Inter** font (SIL OFL). Optional system package: `sudo dnf install google-inter-fonts`.
 
 The Cloud Agent environment cannot run Mutter. Visual checks happen on a Fedora GNOME session. Headless tests cover the activity stack, motion math, geometry fit, panel-media matching, and clock/OSD classification.
 
