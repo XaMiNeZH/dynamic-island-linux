@@ -78,8 +78,16 @@ export class Presenter {
             return;
         }
 
+        let actor;
+        try {
+            actor = buildView(activity, this._clock.text);
+        } catch (error) {
+            console.warn(`[dynamic-island] view failed: ${error.message}`);
+            this._armExpiry();
+            return;
+        }
+
         this._key = key;
-        const actor = buildView(activity, this._clock.text);
         this._view = actor;
         const fade = this._island.geometry.height !== geom.height ||
             this._island.geometry.width !== geom.width;

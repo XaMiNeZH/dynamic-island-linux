@@ -679,6 +679,7 @@ export function buildMediaExpanded(payload) {
     const top = new St.BoxLayout({
         style_class: 'dynamic-island-row dynamic-island-media-top',
         x_expand: true,
+        y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
     });
     const art = artClip(payload?.artUrl, 44);
@@ -709,6 +710,7 @@ export function buildMediaExpanded(payload) {
         style_class: 'dynamic-island-seek-block',
         vertical: true,
         x_expand: true,
+        y_expand: false,
     });
     const timeRow = new St.BoxLayout({
         style_class: 'dynamic-island-seek-times',
@@ -744,10 +746,11 @@ export function buildMediaExpanded(payload) {
         y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    const leftSlot = new St.Bin({
+    const leftSlot = new St.Widget({
         x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
         width: 28,
+        height: 1,
+        reactive: false,
     });
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
@@ -777,14 +780,16 @@ export function buildMediaExpanded(payload) {
     const showVolume = payload?.hasVolume === true;
     volume.visible = showVolume;
     volume.reactive = showVolume;
-    const rightSlot = new St.Bin({
+    const rightSlot = new St.BoxLayout({
         x_expand: true,
-        x_fill: false,
-        x_align: Clutter.ActorAlign.END,
         y_align: Clutter.ActorAlign.CENTER,
-        width: 28,
     });
-    rightSlot.set_child(volume);
+    rightSlot.add_child(new St.Widget({
+        x_expand: true,
+        height: 1,
+        reactive: false,
+    }));
+    rightSlot.add_child(volume);
 
     bottom.add_child(leftSlot);
     bottom.add_child(controls);
