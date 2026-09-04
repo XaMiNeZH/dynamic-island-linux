@@ -1,7 +1,7 @@
 #!/usr/bin/env gjs
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import {activityKey, clamp, lerp, easeOutBack, easeOutCubic, morphFrame, sameGeometry} from '../src/lib/motion.js';
+import {activityKey, clamp, lerp, easeOutBack, easeOutCubic, morphFrame, sameGeometry, springOvershoot, springProgress} from '../src/lib/motion.js';
 import {geometryFor, Geometry} from '../src/lib/constants.js';
 
 let passed = 0;
@@ -39,6 +39,14 @@ assert(geometryFor('volume').height === geometryFor('idle').height, 'osd stays c
 assert(geometryFor('media', false).width > geometryFor('idle').width, 'compact media is wider');
 assert(activityKey({id: 'media', kind: 'media', expanded: false}) === 'media:media:0', 'activity key compact');
 assert(activityKey({id: 'media', kind: 'media', expanded: true}) === 'media:media:1', 'activity key expanded');
+
+assert(Math.abs(springProgress(0)) < 1e-6, 'spring starts at 0');
+assert(Math.abs(springProgress(3) - 1) < 0.02, 'spring settles at 1');
+assert(springProgress(0.2) > 0 && springProgress(0.2) < 1, 'spring is in flight at t=0.2');
+const overshoot = springOvershoot();
+assert(overshoot > 0, 'spring overshoots a little');
+assert(overshoot < 0.18, `spring overshoot stays small (${overshoot})`);
+assert(springProgress(0.8) > 0.8, 'spring is mostly there by t=0.8 for content fade');
 
 print(`motion: ${passed} passed, ${failed} failed`);
 if (failed)
