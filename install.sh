@@ -29,10 +29,14 @@ echo
 
 if command -v gnome-extensions >/dev/null; then
     gnome-extensions enable "${UUID}" 2>/dev/null || true
-    echo "If the island is not visible yet, log out of this Wayland session and log back in, then run:"
+    echo "Settings (alignment, clock, timeouts) apply immediately — no logout."
+    echo "Code changes need a fresh GNOME Shell process. Prefer a nested window:"
+    echo "  ./tools/try.sh"
+    echo "That keeps this session and your apps open. Log out only as a last resort, then:"
     echo "  gnome-extensions enable ${UUID}"
 else
-    echo "gnome-extensions CLI not found. Enable the extension from GNOME Extensions after logging out."
+    echo "gnome-extensions CLI not found. Enable the extension from GNOME Extensions."
+    echo "To test code changes without logging out, run ./tools/try.sh on Fedora GNOME."
 fi
 
 echo

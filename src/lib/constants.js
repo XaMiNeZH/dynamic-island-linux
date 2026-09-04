@@ -16,10 +16,12 @@ export const Geometry = {
 /** Compact pills sit inside the panel with this inset on top and bottom. */
 export const COMPACT_PANEL_MARGIN = 1;
 
-export function compactHeightForPanel(panelHeight) {
+export function compactHeightForPanel(panelHeight, margin = null) {
     const height = Math.max(24, Math.round(panelHeight || 32));
-    const margin = height >= 40 ? 3 : COMPACT_PANEL_MARGIN;
-    return Math.max(22, height - margin * 2);
+    const resolvedMargin = margin == null
+        ? (height >= 40 ? 3 : COMPACT_PANEL_MARGIN)
+        : Math.max(0, Math.round(Number(margin)));
+    return Math.max(22, height - resolvedMargin * 2);
 }
 
 export function compactTopInset(panelHeight, compactHeight) {
@@ -28,12 +30,12 @@ export function compactTopInset(panelHeight, compactHeight) {
     return Math.max(0, Math.round((height - pill) / 2));
 }
 
-export function fitGeometryToPanel(geom, panelHeight) {
+export function fitGeometryToPanel(geom, panelHeight, options = {}) {
     if (!geom)
         return geom;
     if (geom.compact === false)
         return {...geom};
-    const height = compactHeightForPanel(panelHeight);
+    const height = compactHeightForPanel(panelHeight, options.margin);
     return {
         ...geom,
         height,

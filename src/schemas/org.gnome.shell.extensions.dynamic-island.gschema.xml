@@ -60,5 +60,17 @@
       <default>2600</default>
       <summary>Charging, Bluetooth, and privacy hold time</summary>
     </key>
+    <key name="compact-margin" type="i">
+      <default>1</default>
+      <range min="0" max="8"/>
+      <summary>Compact pill inset from the panel edges</summary>
+      <description>Pixels removed from the top and bottom of the compact island so it sits inside the top bar. Applies immediately.</description>
+    </key>
+    <key name="vertical-offset" type="i">
+      <default>0</default>
+      <range min="-24" max="24"/>
+      <summary>Extra vertical nudge</summary>
+      <description>Move the island up (negative) or down (positive) relative to the panel. Applies immediately.</description>
+    </key>
   </schema>
 </schemalist>

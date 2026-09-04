@@ -50,6 +50,20 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
             _('Charging and Bluetooth hold time'),
             null, 800, 8000, 100));
         page.add(motion);
+
+        const align = new Adw.PreferencesGroup({
+            title: _('Alignment'),
+            description: _('These sliders move the pill immediately. You do not need to log out. Use a nested test window (./tools/try.sh) only when the extension code itself changed.'),
+        });
+        align.add(this._spin(settings, 'compact-margin',
+            _('Bar inset'),
+            _('Pixels of space above and below the compact pill inside the top bar.'),
+            0, 8, 1));
+        align.add(this._spin(settings, 'vertical-offset',
+            _('Vertical nudge'),
+            _('Negative moves the island up; positive moves it down.'),
+            -24, 24, 1));
+        page.add(align);
         return page;
     }
 

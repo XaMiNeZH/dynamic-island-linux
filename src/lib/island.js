@@ -9,6 +9,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {
+    COMPACT_PANEL_MARGIN,
     Geometry,
     compactHeightForPanel,
     compactTopInset,
@@ -38,6 +39,9 @@ export const Island = GObject.registerClass({
         this._morphGen = 0;
         this._contentGen = 0;
         this._chrome = false;
+        this._settings = null;
+        this._settingsIds = [];
+        this._bindSettings();
 
         this._spacer = new St.Widget({
             style_class: 'dynamic-island-spacer',
@@ -236,6 +240,47 @@ export const Island = GObject.registerClass({
         return this._geom;
     }
 
+    _bindSettings() {
+        try {
+            this._settings = this._extension.getSettings();
+        } catch {
+            this._settings = null;
+            return;
+        }
+        for (const key of ['compact-margin', 'vertical-offset']) {
+            this._settingsIds.push(
+                this._settings.connect(`changed::${key}`, () => this.relayout(false)));
+        }
+    }
+
+    _unbindSettings() {
+        if (this._settings && this._settingsIds?.length) {
+            for (const id of this._settingsIds) {
+                try {
+                    this._settings.disconnect(id);
+                } catch {
+                    // already gone
+                }
+            }
+        }
+        this._settingsIds = [];
+        this._settings = null;
+    }
+
+    _layoutOptions() {
+        let margin = COMPACT_PANEL_MARGIN;
+        let offset = 0;
+        try {
+            if (this._settings) {
+                margin = this._settings.get_int('compact-margin');
+                offset = this._settings.get_int('vertical-offset');
+            }
+        } catch {
+            // schema not available in this session
+        }
+        return {margin, offset};
+    }
+
     _bindPanel() {
         const box = Main.layoutManager.panelBox;
         this._panelIds = [];
@@ -325,22 +370,25 @@ export const Island = GObject.registerClass({
     }
 
     fitGeometry(geom) {
-        return fitGeometryToPanel(geom, this._panelRect().height);
+        return fitGeometryToPanel(geom, this._panelRect().height, {
+            margin: this._layoutOptions().margin,
+        });
     }
 
     _targetBox(geom) {
         const panel = this._panelRect();
         const monitor = Main.layoutManager.primaryMonitor;
+        const {margin, offset} = this._layoutOptions();
         const resolved = this.fitGeometry(geom);
         const compactHeight = resolved.compact === false
-            ? compactHeightForPanel(panel.height)
+            ? compactHeightForPanel(panel.height, margin)
             : resolved.height;
         const inset = compactTopInset(panel.height, compactHeight);
         const screenX = monitor?.x ?? panel.x;
         const screenW = monitor?.width ?? panel.width;
         return {
             x: screenX + Math.round((screenW - resolved.width) / 2),
-            y: panel.y + inset,
+            y: panel.y + inset + offset,
         };
     }
 
@@ -427,6 +475,7 @@ export const Island = GObject.registerClass({
             this._monitorsId = 0;
         }
         this._unbindPanel();
+        this._unbindSettings();
         this._unmountChrome();
         this._capsule.destroy();
         super.destroy();

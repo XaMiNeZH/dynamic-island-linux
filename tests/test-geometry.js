@@ -60,6 +60,13 @@ assert(isExpandedGeometry(Geometry.mediaExpanded), 'media expanded is expanded')
 assert(!isExpandedGeometry(geometryFor('privacy', false)), 'privacy compact is not expanded');
 assert(isExpandedGeometry(geometryFor('privacy', true)), 'privacy expanded is expanded');
 
+assert(compactHeightForPanel(32, 0) === 32, 'zero margin fills a 32px panel');
+assert(compactHeightForPanel(32, 2) === 28, 'custom margin 2 shrinks the pill');
+assert(fitGeometryToPanel(Geometry.idle, 32, {margin: 2}).height === 28,
+    'fitGeometryToPanel honors a custom margin');
+assert(fitGeometryToPanel(Geometry.idle, 32, {margin: 2}).radius === 14,
+    'custom margin keeps a half-capsule radius');
+
 print(`geometry: ${passed} passed, ${failed} failed`);
 if (failed)
     throw new Error(`${failed} assertion(s) failed`);

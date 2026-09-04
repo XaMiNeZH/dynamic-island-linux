@@ -2,7 +2,7 @@ UUID := dynamic-island@xaminezh.xyz
 SRC := src
 ZIP := $(UUID).shell-extension.zip
 
-.PHONY: all check schemas test zip install uninstall clean
+.PHONY: all check schemas test zip install uninstall try clean
 
 all: check zip
 
@@ -30,6 +30,9 @@ zip: schemas
 
 install: schemas
 	./install.sh
+
+try: schemas
+	./tools/try.sh
 
 uninstall:
 	./uninstall.sh

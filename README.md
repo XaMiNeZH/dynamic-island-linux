@@ -15,11 +15,22 @@ cd dynamic-island-linux
 ./install.sh
 ```
 
-Wayland cannot reload GNOME Shell in place. **Log out and log back in**, then:
+Settings (alignment, clock, timeouts) apply as soon as you change them. **You do not need to log out for that.**
+
+Wayland cannot reload extension *code* inside the running Shell. Do not log out for every tweak. Open a nested GNOME window instead — your current session and apps stay open:
+
+```bash
+sudo dnf install mutter-devkit   # once, GNOME 49+
+./tools/try.sh
+```
+
+If the island is missing inside that window, enable it there:
 
 ```bash
 gnome-extensions enable dynamic-island@xaminezh.xyz
 ```
+
+Log out of the real session only when you want the new code on the host desktop.
 
 Uninstall:
 
@@ -53,15 +64,19 @@ Open **Extensions → Dynamic Island → Settings** (or `gnome-extensions prefs 
 - Per-source toggles
 - Morph duration and hold times
 - Clock format (follow GNOME, 12-hour, 24-hour)
+- Alignment: bar inset and a vertical nudge (live, no logout)
 
 ## Development
 
 ```bash
 make check    # schemas + headless gjs tests
 make zip      # pack dynamic-island@xaminezh.xyz.shell-extension.zip
+./tools/try.sh  # nested GNOME window; no logout
 ```
 
-The Cloud Agent environment cannot run Mutter. Visual checks happen on a Fedora GNOME session. Headless tests cover the activity stack, motion math, and clock/OSD classification.
+GJS caches extension modules for the life of the `gnome-shell` process. `disable` / `enable` re-runs `enable()` but does **not** pick up file edits. A nested window (`./tools/try.sh`) is a new process, so it loads the files you just installed.
+
+The Cloud Agent environment cannot run Mutter. Visual checks happen on a Fedora GNOME session. Headless tests cover the activity stack, motion math, geometry fit, and clock/OSD classification.
 
 ## Why not the other islands
 
