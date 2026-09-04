@@ -48,7 +48,7 @@ Disable restores notification banners, the stock OSD, and any panel media-contro
 | Notification | Pill springs into a card; click opens the app |
 | Media (compact) | Album art (or the player icon) and sound waves |
 | Media (hover) | Same compact pill, small symbolic play/pause that actually toggles |
-| Media (expanded) | Click opens a three-row iPhone card: art/title/waves, leftover seek, centered transport, volume icon on the right |
+| Media (expanded) | Click opens a wide now-playing panel: large album art, marquee title/artist, art-tinted waveform, capsule scrubber, transport, volume on the right |
 | Volume / brightness / mute | Island takes over the GNOME OSD |
 | Charging | Percentage when you plug in |
 | Bluetooth | Device name on connect |
@@ -57,6 +57,8 @@ Disable restores notification banners, the stock OSD, and any panel media-contro
 The panel date/time stays where GNOME put it. Right-click the idle notch to open the calendar. Other MPRIS panel widgets (such as media-controls) are hidden by default so they do not sit behind the island.
 
 A later release can add a hybrid dashboard. v1 is Apple-faithful only: live activities and transients, no weather/notes hub.
+
+Compact and expanded media tint the six-bar waveform from album art. Bars grow from the center (silence is a row of dots). GNOME has no per-app audio tap, so the motion is procedural rather than a live FFT.
 
 ## Preferences
 
@@ -79,7 +81,7 @@ make zip      # pack dynamic-island@xaminezh.xyz.shell-extension.zip
 
 GJS caches extension modules for the life of the `gnome-shell` process. `disable` / `enable` re-runs `enable()` but does **not** pick up file edits. A nested window (`./tools/try.sh`) is a new process, so it loads the files you just installed.
 
-After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + waves, hover pause is small and toggles playback, and clicking the empty pill expands a **rounded** now-playing card with times above the seek bar, centered transport, and a speaker on the right (no bottom volume slider).
+After `./tools/try.sh`, confirm: the panel date/time is still there, media-controls is not peeking through the notch, compact media is art + a 6-bar waveform, hover pause is small and toggles playback, and clicking the empty pill expands a **wide** now-playing panel with large rounded art on the left, title/artist, waves in the top-right, a capsule seek bar with times underneath, centered transport, and a speaker on the right (no bottom volume slider).
 
 Typography uses **SF Pro** if you have it installed, otherwise the bundled **Inter** font (SIL OFL). Optional system package: `sudo dnf install google-inter-fonts`.
 

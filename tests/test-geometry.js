@@ -67,10 +67,10 @@ assert(fitGeometryToPanel(Geometry.idle, 32, {margin: 2}).height === 28,
 assert(fitGeometryToPanel(Geometry.idle, 32, {margin: 2}).radius === 14,
     'custom margin keeps a half-capsule radius');
 
-assert(Geometry.compact.width === 148, 'compact media is wide enough for art plus pause');
-assert(Geometry.mediaExpanded.width === 348, 'expanded media card is 348 wide');
-assert(Geometry.mediaExpanded.height === 148, 'expanded media card is 148 tall');
-assert(Geometry.mediaExpanded.radius === 32, 'expanded media keeps round corners');
+assert(Geometry.compact.width === 152, 'compact media is wide enough for art plus waves');
+assert(Geometry.mediaExpanded.width === 520, 'expanded media card is 520 wide');
+assert(Geometry.mediaExpanded.height === 146, 'expanded media card is 146 tall');
+assert(Geometry.mediaExpanded.radius === 36, 'expanded media keeps round corners');
 assert(Geometry.notification.width === 300, 'notification card is 300 wide');
 assert(Geometry.notification.height === 68, 'notification card is 68 tall');
 assert(Geometry.notification.radius === 22, 'notifications keep round corners');

@@ -115,6 +115,21 @@ export function formatMediaRemainingUs(positionUs, lengthUs) {
     return `-${formatMediaClockUs(leftover)}`;
 }
 
+/** Run the seek clock between coarse MPRIS Position reads. */
+export function displayedPlaybackUs(state, nowMonoUs) {
+    const position = Math.max(0, Number(state?.positionUs ?? 0));
+    const length = Math.max(0, Number(state?.lengthUs ?? 0));
+    if (!state?.playing)
+        return position;
+    const elapsed = Math.max(0, Number(nowMonoUs) - Number(state?.anchorMonoUs ?? nowMonoUs));
+    const next = position + elapsed;
+    return length > 0 ? Math.min(length, next) : next;
+}
+
+export function playbackNeedsResync(displayedUs, reportedUs, slackUs = 1_200_000) {
+    return Math.abs(Number(displayedUs) - Number(reportedUs)) > slackUs;
+}
+
 export function formatClock(dateTime, {use24h, showSeconds}) {
     if (use24h) {
         return showSeconds

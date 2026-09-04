@@ -7,7 +7,21 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {Kind} from './activity-stack.js';
-import {formatMediaClockUs, formatMediaRemainingUs} from './utils.js';
+import {requestPalette} from './palette-load.js';
+import {FALLBACK_PALETTE, mixHex} from './palette.js';
+import {
+    displayedPlaybackUs,
+    formatMediaClockUs,
+    formatMediaRemainingUs,
+    playbackNeedsResync,
+} from './utils.js';
+import {
+    BAR_COUNT,
+    BAR_THICKNESS,
+    DOT_HEIGHT,
+    barHeightPx,
+    proceduralLevel,
+} from './waveform.js';
 
 function label(text, styleClass, expand = false) {
     const widget = new St.Label({
@@ -91,8 +105,8 @@ function artIcon(url, size = 22) {
     return widget;
 }
 
-function artClip(url, size) {
-    const radius = Math.max(3, Math.round(size * 0.2));
+function artClip(url, size, radius = null) {
+    const corner = radius ?? Math.max(4, Math.round(size * 0.22));
     const clip = new St.Bin({
         style_class: 'dynamic-island-art-clip',
         width: size,
@@ -107,7 +121,7 @@ function artClip(url, size) {
         const imageCss = image
             ? `background-image: ${cssUrl(image)}; background-size: cover; background-position: center;`
             : 'background-image: none;';
-        clip.style = `border-radius: ${radius}px; ${imageCss}`;
+        clip.style = `border-radius: ${corner}px; ${imageCss}`;
     };
 
     const showFallback = data => {
@@ -197,19 +211,19 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
         x_expand: true,
         y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
-        height: 16,
+        height: 12,
         layout_manager: new Clutter.BinLayout(),
     });
     const rail = new St.Widget({
         style_class: 'dynamic-island-seek-rail',
-        height: 2,
+        height: 6,
         x_expand: true,
         x_align: Clutter.ActorAlign.FILL,
         y_align: Clutter.ActorAlign.CENTER,
     });
     const fill = new St.Widget({
         style_class: 'dynamic-island-seek-fill',
-        height: 3,
+        height: 6,
         x_align: Clutter.ActorAlign.START,
         y_align: Clutter.ActorAlign.CENTER,
         width: Math.max(0, Math.round(pct * 148)),
@@ -229,7 +243,7 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
         const width = Math.round(n * railWidth());
         fill.remove_all_transitions();
         fill.visible = width > 0;
-        const target = Math.max(width > 0 ? 2 : 0, width);
+        const target = width > 0 ? Math.max(6, width) : 0;
         if (animate && width > 0) {
             fill.ease({
                 width: target,
@@ -312,10 +326,10 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
         stopCapture();
     });
 
-    track.setLevel = next => {
+    track.setLevel = (next, animate = true) => {
         if (dragging)
             return;
-        apply(next, true);
+        apply(next, animate);
     };
     Object.defineProperty(track, 'dragging', {
         get() {
@@ -376,72 +390,210 @@ function levelBar(value) {
 }
 
 function equalizer(playing, options = {}) {
-    const accent = options.accent === true;
-    const barCount = options.bars ?? (accent ? 5 : 4);
-    const minH = accent ? 6 : 4;
-    const span = accent ? 14 : 10;
-    const palette = ['#ff7a59', '#ff8a55', '#ffb070', '#ff7a59', '#ff9a60'];
+    const stripH = options.height ?? (options.accent ? 22 : 14);
+    const barCount = options.bars ?? BAR_COUNT;
+    const thickness = options.thickness ?? BAR_THICKNESS;
     const box = new St.BoxLayout({
-        style_class: accent
+        style_class: options.accent
             ? 'dynamic-island-eq dynamic-island-eq-accent'
             : 'dynamic-island-eq',
         y_align: Clutter.ActorAlign.CENTER,
         x_align: Clutter.ActorAlign.END,
         x_expand: false,
+        height: stripH,
+        reactive: false,
     });
     const bars = [];
     for (let i = 0; i < barCount; i++) {
         const bar = new St.Widget({
             style_class: 'dynamic-island-eq-bar',
-            width: 3,
-            height: playing ? minH + (i % 3) * 3 : minH,
+            width: thickness,
+            height: DOT_HEIGHT,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        if (accent)
-            bar.style = `background-color: ${palette[i % palette.length]};`;
         box.add_child(bar);
         bars.push(bar);
     }
 
+    let palette = {...FALLBACK_PALETTE};
     let timer = 0;
-    const pulse = () => {
-        if (!box._playing) {
-            for (const bar of bars) {
-                bar.remove_all_transitions();
-                bar.height = minH;
-            }
-            return GLib.SOURCE_CONTINUE;
+
+    const paint = () => {
+        const seconds = GLib.get_monotonic_time() / 1_000_000;
+        for (let i = 0; i < bars.length; i++) {
+            const level = proceduralLevel(i, seconds, {playing: box._playing});
+            const height = barHeightPx(level, stripH);
+            const bar = bars[i];
+            bar.remove_all_transitions();
+            bar.height = height;
+            const color = mixHex(palette.primary, palette.accent, 0.22 + 0.78 * level);
+            bar.style = `background-color: ${color}; border-radius: ${Math.min(thickness, height) / 2}px;`;
         }
-        for (const bar of bars) {
-            const next = minH + Math.round(Math.random() * span);
-            bar.ease({
-                height: next,
-                duration: 140,
-                mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
-            });
+    };
+
+    const stop = () => {
+        if (!timer)
+            return;
+        GLib.source_remove(timer);
+        timer = 0;
+    };
+
+    const arm = () => {
+        if (box._playing) {
+            if (!timer)
+                timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 33, () => {
+                    paint();
+                    return GLib.SOURCE_CONTINUE;
+                });
+            return;
         }
-        return GLib.SOURCE_CONTINUE;
+        stop();
+        paint();
     };
 
     box._playing = !!playing;
-    if (playing)
-        timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 160, pulse);
-
     box.setPlaying = next => {
         box._playing = !!next;
-        if (next && !timer)
-            timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 160, pulse);
-        if (!next)
-            pulse();
+        arm();
+    };
+    box.setPalette = next => {
+        palette = next && next.primary ? next : {...FALLBACK_PALETTE};
+        paint();
     };
 
-    box.connect('destroy', () => {
-        if (timer) {
-            GLib.source_remove(timer);
-            timer = 0;
-        }
-    });
+    paint();
+    arm();
+    box.connect('destroy', stop);
     return box;
+}
+
+function attachPalette(eq, url) {
+    let last = '\0';
+    const apply = nextUrl => {
+        const key = nextUrl || '';
+        if (key === last)
+            return;
+        last = key;
+        requestPalette(key, pal => {
+            if (key !== last)
+                return;
+            eq.setPalette?.(pal || FALLBACK_PALETTE);
+        });
+    };
+    apply(url);
+    return apply;
+}
+
+function marqueeLabel(text, styleClass, {expand = true, height = 18} = {}) {
+    const clip = new St.Widget({
+        style_class: 'dynamic-island-marquee',
+        x_expand: expand,
+        y_align: Clutter.ActorAlign.CENTER,
+        height,
+        reactive: false,
+    });
+    clip.clip_to_allocation = true;
+    try {
+        clip.layout_manager = new Clutter.FixedLayout();
+    } catch {
+        // default actor layout still honors set_position
+    }
+
+    const copy = () => {
+        const widget = new St.Label({
+            text: text ?? '',
+            style_class: styleClass,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        widget.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        widget.clutter_text.single_line_mode = true;
+        return widget;
+    };
+
+    const first = copy();
+    const second = copy();
+    clip.add_child(first);
+    clip.add_child(second);
+
+    const SPEED = 30;
+    const GAP = 44;
+    let alive = true;
+    let delayId = 0;
+
+    const cancel = () => {
+        if (delayId) {
+            GLib.source_remove(delayId);
+            delayId = 0;
+        }
+        first.remove_all_transitions();
+        second.remove_all_transitions();
+    };
+
+    const textWidth = () => {
+        try {
+            const pref = first.get_preferred_width(-1);
+            return Math.ceil(pref?.[1] ?? pref?.[0] ?? first.width ?? 0);
+        } catch {
+            return Math.ceil(first.width || 0);
+        }
+    };
+
+    const startSlide = () => {
+        if (!alive)
+            return;
+        cancel();
+        first.translation_x = 0;
+        second.translation_x = 0;
+        const width = textWidth();
+        first.set_position(0, 0);
+        second.set_position(width + GAP, 0);
+        const avail = clip.width || 0;
+        if (!(width > avail + 2) || !(avail > 0)) {
+            second.visible = false;
+            return;
+        }
+        second.visible = true;
+        const distance = width + GAP;
+        const duration = Math.max(400, Math.round((distance / SPEED) * 1000));
+        delayId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 320, () => {
+            delayId = 0;
+            if (!alive)
+                return GLib.SOURCE_REMOVE;
+            const slide = {
+                translation_x: -distance,
+                duration,
+                mode: Clutter.AnimationMode.LINEAR,
+                onComplete: () => {
+                    if (!alive)
+                        return;
+                    first.translation_x = 0;
+                    second.translation_x = 0;
+                    startSlide();
+                },
+            };
+            first.ease(slide);
+            second.ease({
+                translation_x: -distance,
+                duration,
+                mode: Clutter.AnimationMode.LINEAR,
+            });
+            return GLib.SOURCE_REMOVE;
+        });
+    };
+
+    clip.setText = next => {
+        const value = next ?? '';
+        first.text = value;
+        second.text = value;
+        startSlide();
+    };
+
+    clip.connect('notify::width', startSlide);
+    clip.connect('destroy', () => {
+        alive = false;
+        cancel();
+    });
+    return clip;
 }
 
 function slot(child, side) {
@@ -514,22 +666,25 @@ function mediaPlayIcon(playing) {
 
 export function buildMediaCompact(payload) {
     const hold = {payload};
-    const art = artClip(payload?.artUrl, 22);
+    const art = artClip(payload?.artUrl, 22, 5);
     art.setMedia(payload);
 
     const stack = new St.Widget({
         style_class: 'dynamic-island-compact-trail',
-        width: 22,
+        width: 28,
         height: 22,
+        layout_manager: new Clutter.BinLayout(),
     });
-    const eq = equalizer(payload?.playing === true);
-    eq.set_position(2, 4);
+    const eq = equalizer(payload?.playing === true, {height: 14});
+    eq.x_align = Clutter.ActorAlign.CENTER;
+    eq.y_align = Clutter.ActorAlign.CENTER;
     const play = iconButton(
         mediaPlayIcon(payload?.playing === true),
         () => hold.payload?.playPause?.(),
         'is-compact-play',
         14);
-    play.set_position(2, 2);
+    play.x_align = Clutter.ActorAlign.CENTER;
+    play.y_align = Clutter.ActorAlign.CENTER;
     stack.add_child(eq);
     stack.add_child(play);
 
@@ -538,10 +693,11 @@ export function buildMediaCompact(payload) {
     root.suppressHoverScale = true;
     root._payload = payload;
     root._hover = false;
+    const refreshPalette = attachPalette(eq, payload?.artUrl);
 
     const showHover = hover => {
         eq.opacity = hover ? 0 : 255;
-        eq.reactive = !hover;
+        eq.reactive = false;
         play.opacity = hover ? 255 : 0;
         play.reactive = !!hover;
         play.visible = true;
@@ -559,6 +715,7 @@ export function buildMediaCompact(payload) {
         art.setMedia(next);
         eq.setPlaying(next?.playing === true);
         play.setIconName(mediaPlayIcon(next?.playing === true));
+        refreshPalette(next?.artUrl);
         showHover(root._hover);
     };
     return root;
@@ -668,7 +825,6 @@ function volumeOutput(payload, getPayload) {
 export function buildMediaExpanded(payload) {
     const root = new St.BoxLayout({
         style_class: 'dynamic-island-media-expanded',
-        vertical: true,
         x_expand: true,
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
@@ -676,35 +832,57 @@ export function buildMediaExpanded(payload) {
     root._payload = payload;
     root.suppressHoverScale = true;
 
-    const top = new St.BoxLayout({
-        style_class: 'dynamic-island-row dynamic-island-media-top',
+    const art = artClip(payload?.artUrl, 108, 14);
+    art.setMedia(payload);
+    art.y_align = Clutter.ActorAlign.CENTER;
+    root.add_child(art);
+
+    const col = new St.BoxLayout({
+        vertical: true,
+        x_expand: true,
+        y_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+        style_class: 'dynamic-island-media-copy',
+    });
+
+    const head = new St.BoxLayout({
+        style_class: 'dynamic-island-media-head',
         x_expand: true,
         y_expand: false,
-        y_align: Clutter.ActorAlign.CENTER,
+        y_align: Clutter.ActorAlign.START,
     });
-    const art = artClip(payload?.artUrl, 44);
-    art.setMedia(payload);
-    top.add_child(art);
-
     const textCol = new St.BoxLayout({
         vertical: true,
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
-        style_class: 'dynamic-island-text-col',
+        style_class: 'dynamic-island-text-col is-media',
     });
-    const title = label(payload?.title || 'Not playing', 'dynamic-island-title', true);
-    const artist = label(payload?.artist || '', 'dynamic-island-subtitle', true);
+    const title = marqueeLabel(payload?.title || 'Not playing', 'dynamic-island-title', {
+        height: 18,
+    });
+    const artist = marqueeLabel(payload?.artist || '', 'dynamic-island-subtitle', {
+        height: 15,
+    });
     textCol.add_child(title);
     textCol.add_child(artist);
-    top.add_child(textCol);
+    head.add_child(textCol);
 
-    const eq = equalizer(payload?.playing === true, {accent: true, bars: 5});
-    top.add_child(eq);
-    root.add_child(top);
+    const eq = equalizer(payload?.playing === true, {accent: true, height: 22});
+    eq.y_align = Clutter.ActorAlign.START;
+    head.add_child(eq);
+    col.add_child(head);
 
     const lengthUs = payload?.lengthUs ?? 0;
     const positionUs = payload?.positionUs ?? 0;
     const frac = lengthUs > 0 ? positionUs / lengthUs : 0;
+
+    const clock = {
+        playing: payload?.playing === true,
+        positionUs,
+        lengthUs,
+        anchorMonoUs: GLib.get_monotonic_time(),
+        title: payload?.title || '',
+    };
 
     const seekBlock = new St.BoxLayout({
         style_class: 'dynamic-island-seek-block',
@@ -733,12 +911,17 @@ export function buildMediaExpanded(payload) {
     };
 
     const seek = dragBar('dynamic-island-seek', frac, {
-        onCommit: next => root._payload?.seek?.(next),
+        onCommit: next => {
+            const length = root._payload?.lengthUs ?? 0;
+            clock.positionUs = length > 0 ? next * length : 0;
+            clock.anchorMonoUs = GLib.get_monotonic_time();
+            root._payload?.seek?.(next);
+        },
         onPreview: previewTimes,
     });
-    seekBlock.add_child(timeRow);
     seekBlock.add_child(seek);
-    root.add_child(seekBlock);
+    seekBlock.add_child(timeRow);
+    col.add_child(seekBlock);
 
     const bottom = new St.BoxLayout({
         style_class: 'dynamic-island-media-bottom',
@@ -761,17 +944,17 @@ export function buildMediaExpanded(payload) {
         'media-skip-backward-symbolic',
         () => root._payload?.previous?.(),
         'is-transport-skip',
-        16);
+        20);
     const play = iconButton(
         mediaPlayIcon(payload?.playing === true),
         () => root._payload?.playPause?.(),
         'is-transport-play',
-        20);
+        28);
     const next = iconButton(
         'media-skip-forward-symbolic',
         () => root._payload?.next?.(),
         'is-transport-skip',
-        16);
+        20);
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
@@ -794,27 +977,75 @@ export function buildMediaExpanded(payload) {
     bottom.add_child(leftSlot);
     bottom.add_child(controls);
     bottom.add_child(rightSlot);
-    root.add_child(bottom);
+    col.add_child(bottom);
+    root.add_child(col);
+
+    const refreshPalette = attachPalette(eq, payload?.artUrl);
+
+    let tickId = 0;
+    const paintClock = () => {
+        if (seek.dragging)
+            return;
+        const pos = displayedPlaybackUs(clock, GLib.get_monotonic_time());
+        const length = clock.lengthUs;
+        seek.setLevel(length > 0 ? pos / length : 0, false);
+        elapsed.text = formatMediaClockUs(pos);
+        remaining.text = formatMediaRemainingUs(pos, length);
+    };
+    const stopTick = () => {
+        if (!tickId)
+            return;
+        GLib.source_remove(tickId);
+        tickId = 0;
+    };
+    const armTick = () => {
+        if (clock.playing) {
+            if (!tickId)
+                tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 33, () => {
+                    paintClock();
+                    return GLib.SOURCE_CONTINUE;
+                });
+            return;
+        }
+        stopTick();
+        paintClock();
+    };
 
     root.update = data => {
         root._payload = data;
         art.setMedia(data);
-        title.text = data?.title || 'Not playing';
-        artist.text = data?.artist || '';
+        title.setText(data?.title || 'Not playing');
+        artist.setText(data?.artist || '');
         play.setIconName(mediaPlayIcon(data?.playing === true));
         eq.setPlaying(data?.playing === true);
-        const length = data?.lengthUs ?? 0;
-        if (!seek.dragging) {
-            seek.setLevel(length > 0 ? (data.positionUs ?? 0) / length : 0);
-            elapsed.text = formatMediaClockUs(data?.positionUs);
-            remaining.text = formatMediaRemainingUs(data?.positionUs, length);
+        refreshPalette(data?.artUrl);
+
+        const now = GLib.get_monotonic_time();
+        const reported = data?.positionUs ?? 0;
+        const shown = displayedPlaybackUs(clock, now);
+        const trackChanged = (data?.title || '') !== clock.title;
+        const lengthChanged = (data?.lengthUs ?? 0) !== clock.lengthUs;
+        if (data?.playing !== clock.playing || trackChanged || lengthChanged ||
+            playbackNeedsResync(shown, reported)) {
+            clock.positionUs = reported;
+            clock.anchorMonoUs = now;
         }
+        clock.playing = data?.playing === true;
+        clock.lengthUs = data?.lengthUs ?? 0;
+        clock.title = data?.title || '';
+        if (!seek.dragging)
+            paintClock();
+        armTick();
+
         const on = data?.hasVolume === true;
         volume.visible = on;
         volume.reactive = on;
         if (on)
             volume.setLevel(data.volume ?? 0);
     };
+
+    armTick();
+    root.connect('destroy', stopTick);
     return root;
 }
 
