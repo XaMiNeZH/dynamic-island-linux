@@ -7,6 +7,14 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {Kind} from './activity-stack.js';
+import {typeCss} from './fonts.js';
+import {
+    Glyph,
+    mediaPlayGlyph,
+    osdGlyph,
+    paintGlyph,
+    volumeGlyph,
+} from './glyphs.js';
 import {requestPalette} from './palette-load.js';
 import {FALLBACK_PALETTE, mixHex} from './palette.js';
 import {
@@ -32,16 +40,53 @@ function label(text, styleClass, expand = false) {
     });
     widget.clutter_text.ellipsize = Pango.EllipsizeMode.END;
     widget.clutter_text.single_line_mode = true;
+    const optical = /subtitle|seek-time|osd-label|rec-time/.test(styleClass ?? '')
+        ? 'text'
+        : 'display';
+    widget.style = typeCss(optical);
     return widget;
 }
 
-function icon(name, size = 16) {
-    return new St.Icon({
-        icon_name: name || 'dialog-information-symbolic',
-        icon_size: size,
-        style_class: 'dynamic-island-icon',
+function glyphActor(kind, size = 16) {
+    const area = new St.DrawingArea({
+        width: size,
+        height: size,
+        style_class: 'dynamic-island-glyph',
         y_align: Clutter.ActorAlign.CENTER,
+        x_align: Clutter.ActorAlign.CENTER,
     });
+    area._glyph = kind;
+    area._glyphSize = size;
+    area.connect('repaint', a => {
+        const cr = a.get_context();
+        try {
+            paintGlyph(cr, a._glyph, a._glyphSize);
+        } finally {
+            cr.$dispose?.();
+        }
+    });
+    area.setGlyph = next => {
+        area._glyph = next;
+        area.queue_repaint();
+    };
+    return area;
+}
+
+function glyphButton(kind, callback, extraClass = '', iconSize = 16) {
+    const area = glyphActor(kind, iconSize);
+    const button = new St.Button({
+        style_class: `dynamic-island-icon-button ${extraClass}`.trim(),
+        reactive: true,
+        can_focus: true,
+        track_hover: true,
+        child: area,
+    });
+    button.connect('button-press-event', () => {
+        callback();
+        return Clutter.EVENT_STOP;
+    });
+    button.setGlyph = next => area.setGlyph(next);
+    return button;
 }
 
 function iconFromGicon(gicon, fallback, size = 20) {
@@ -340,30 +385,6 @@ function dragBar(styleClass, fraction, {onCommit, onPreview} = {}) {
     return track;
 }
 
-function iconButton(iconName, callback, extraClass = '', iconSize = null) {
-    const size = iconSize ?? (extraClass.includes('compact-play')
-        ? 14
-        : extraClass.includes('play') ? 18 : 15);
-    const button = new St.Button({
-        style_class: `dynamic-island-icon-button ${extraClass}`.trim(),
-        reactive: true,
-        can_focus: true,
-        track_hover: true,
-        child: new St.Icon({
-            icon_name: iconName,
-            icon_size: size,
-        }),
-    });
-    button.connect('button-press-event', () => {
-        callback();
-        return Clutter.EVENT_STOP;
-    });
-    button.setIconName = name => {
-        button.child.icon_name = name;
-    };
-    return button;
-}
-
 function levelBar(value) {
     const pct = Math.max(0, Math.min(1, value ?? 0));
     const track = new St.Widget({
@@ -371,20 +392,34 @@ function levelBar(value) {
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
         y_expand: false,
+        height: 8,
+        layout_manager: new Clutter.BinLayout(),
     });
     const fill = new St.Widget({
         style_class: 'dynamic-island-level-fill',
-        height: 5,
-        width: Math.max(5, Math.round(pct * 148)),
+        height: 8,
+        width: Math.max(8, Math.round(pct * 148)),
+        x_align: Clutter.ActorAlign.START,
+        y_align: Clutter.ActorAlign.CENTER,
     });
     track.add_child(fill);
+
+    const paint = n => {
+        fill.style = n > 0.8
+            ? 'background-color: #ffe4d4;'
+            : 'background-color: #ffffff;';
+    };
+    paint(pct);
+
     track.setLevel = next => {
         const n = Math.max(0, Math.min(1, next ?? 0));
+        const width = Math.max(track.width || 148, 80);
         fill.ease({
-            width: Math.max(5, Math.round(n * 148)),
+            width: Math.max(8, Math.round(n * width)),
             duration: 140,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
+        paint(n);
     };
     return track;
 }
@@ -507,6 +542,8 @@ function marqueeLabel(text, styleClass, {expand = true, height = 18} = {}) {
         });
         widget.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         widget.clutter_text.single_line_mode = true;
+        const optical = /subtitle|seek-time/.test(styleClass ?? '') ? 'text' : 'display';
+        widget.style = typeCss(optical);
         return widget;
     };
 
@@ -632,36 +669,12 @@ function splitChrome({leading = null, trailing = null}) {
     return root;
 }
 
-function volumeIconName(level, kind) {
-    if (kind === Kind.BRIGHTNESS)
-        return 'display-brightness-symbolic';
-    if (kind === Kind.MUTE)
-        return level === 0
-            ? 'microphone-sensitivity-muted-symbolic'
-            : 'microphone-sensitivity-high-symbolic';
-    if (level == null)
-        return 'audio-volume-medium-symbolic';
-    if (level <= 0.01)
-        return 'audio-volume-muted-symbolic';
-    if (level < 0.34)
-        return 'audio-volume-low-symbolic';
-    if (level < 0.67)
-        return 'audio-volume-medium-symbolic';
-    return 'audio-volume-high-symbolic';
-}
-
 export function buildIdleView() {
     return new St.Widget({
         style_class: 'dynamic-island-idle',
         x_expand: true,
         y_expand: true,
     });
-}
-
-function mediaPlayIcon(playing) {
-    return playing
-        ? 'media-playback-pause-symbolic'
-        : 'media-playback-start-symbolic';
 }
 
 export function buildMediaCompact(payload) {
@@ -678,11 +691,11 @@ export function buildMediaCompact(payload) {
     const eq = equalizer(payload?.playing === true, {height: 14});
     eq.x_align = Clutter.ActorAlign.CENTER;
     eq.y_align = Clutter.ActorAlign.CENTER;
-    const play = iconButton(
-        mediaPlayIcon(payload?.playing === true),
+    const play = glyphButton(
+        mediaPlayGlyph(payload?.playing === true),
         () => hold.payload?.playPause?.(),
         'is-compact-play',
-        14);
+        13);
     play.x_align = Clutter.ActorAlign.CENTER;
     play.y_align = Clutter.ActorAlign.CENTER;
     stack.add_child(eq);
@@ -714,7 +727,7 @@ export function buildMediaCompact(payload) {
         root._payload = next;
         art.setMedia(next);
         eq.setPlaying(next?.playing === true);
-        play.setIconName(mediaPlayIcon(next?.playing === true));
+        play.setGlyph(mediaPlayGlyph(next?.playing === true));
         refreshPalette(next?.artUrl);
         showHover(root._hover);
     };
@@ -738,14 +751,11 @@ function volumeOutput(payload, getPayload) {
         track_hover: true,
         x_align: Clutter.ActorAlign.END,
         y_align: Clutter.ActorAlign.CENTER,
-        child: new St.Icon({
-            icon_name: volumeIconName(payload?.volume, Kind.VOLUME),
-            icon_size: 16,
-        }),
+        child: glyphActor(volumeGlyph(payload?.volume), 16),
     });
 
     const setLevel = level => {
-        button.child.icon_name = volumeIconName(level, Kind.VOLUME);
+        button.child.setGlyph(volumeGlyph(level));
     };
 
     const commit = next => {
@@ -832,10 +842,14 @@ export function buildMediaExpanded(payload) {
     root._payload = payload;
     root.suppressHoverScale = true;
 
+    const artGlow = new St.Bin({
+        style_class: 'dynamic-island-art-glow',
+        y_align: Clutter.ActorAlign.CENTER,
+    });
     const art = artClip(payload?.artUrl, 108, 14);
     art.setMedia(payload);
-    art.y_align = Clutter.ActorAlign.CENTER;
-    root.add_child(art);
+    artGlow.set_child(art);
+    root.add_child(artGlow);
 
     const col = new St.BoxLayout({
         vertical: true,
@@ -940,21 +954,21 @@ export function buildMediaExpanded(payload) {
         x_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    const prev = iconButton(
-        'media-skip-backward-symbolic',
+    const prev = glyphButton(
+        Glyph.prev,
         () => root._payload?.previous?.(),
         'is-transport-skip',
-        20);
-    const play = iconButton(
-        mediaPlayIcon(payload?.playing === true),
+        18);
+    const play = glyphButton(
+        mediaPlayGlyph(payload?.playing === true),
         () => root._payload?.playPause?.(),
         'is-transport-play',
-        28);
-    const next = iconButton(
-        'media-skip-forward-symbolic',
+        26);
+    const next = glyphButton(
+        Glyph.next,
         () => root._payload?.next?.(),
         'is-transport-skip',
-        20);
+        18);
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
@@ -981,6 +995,12 @@ export function buildMediaExpanded(payload) {
     root.add_child(col);
 
     const refreshPalette = attachPalette(eq, payload?.artUrl);
+    attachPalette({
+        setPalette: pal => {
+            artGlow.style =
+                `background-color: ${mixHex(pal.primary, '#000000', 0.62)}; border-radius: 16px;`;
+        },
+    }, payload?.artUrl);
 
     let tickId = 0;
     const paintClock = () => {
@@ -1016,7 +1036,7 @@ export function buildMediaExpanded(payload) {
         art.setMedia(data);
         title.setText(data?.title || 'Not playing');
         artist.setText(data?.artist || '');
-        play.setIconName(mediaPlayIcon(data?.playing === true));
+        play.setGlyph(mediaPlayGlyph(data?.playing === true));
         eq.setPlaying(data?.playing === true);
         refreshPalette(data?.artUrl);
 
@@ -1079,8 +1099,7 @@ export function buildNotificationView(payload) {
 
 export function buildOsdView(payload) {
     const kind = payload?.kind;
-    const iconName = payload?.iconName || volumeIconName(payload?.level, kind);
-    const glyph = icon(iconName, 16);
+    const glyph = glyphActor(osdGlyph(kind, payload?.level), 20);
     const bar = payload?.level != null ? levelBar(payload.level) : null;
     const percent = payload?.level != null
         ? `${Math.round(payload.level * 100)}`
@@ -1099,7 +1118,7 @@ export function buildOsdView(payload) {
     root.add_child(pct);
 
     root.update = next => {
-        glyph.icon_name = next?.iconName || volumeIconName(next?.level, next?.kind ?? kind);
+        glyph.setGlyph(osdGlyph(next?.kind ?? kind, next?.level));
         if (bar && next?.level != null)
             bar.setLevel(next.level);
         if (next?.level != null)
@@ -1114,7 +1133,7 @@ export function buildChargingView(payload) {
     const charging = payload?.charging !== false;
     const percent = Math.round(payload?.percent ?? 0);
     const title = label(charging ? `Charging  ${percent}%` : `${percent}%`, 'dynamic-island-title');
-    const glyph = icon(charging ? 'battery-level-100-charged-symbolic' : 'battery-symbolic', 18);
+    const glyph = glyphActor(charging ? Glyph.batteryCharge : Glyph.battery, 18);
     const root = new St.BoxLayout({
         style_class: 'dynamic-island-system',
         x_expand: true,
@@ -1127,7 +1146,7 @@ export function buildChargingView(payload) {
     root.update = next => {
         const on = next?.charging !== false;
         const n = Math.round(next?.percent ?? 0);
-        glyph.icon_name = on ? 'battery-level-100-charged-symbolic' : 'battery-symbolic';
+        glyph.setGlyph(on ? Glyph.batteryCharge : Glyph.battery);
         title.text = on ? `Charging  ${n}%` : `${n}%`;
     };
     return root;
@@ -1149,25 +1168,25 @@ export function buildBluetoothView(payload) {
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    root.add_child(icon('bluetooth-active-symbolic', 18));
+    root.add_child(glyphActor(Glyph.bluetooth, 18));
     root.add_child(textCol);
     return root;
 }
 
 export function buildPrivacyView(payload) {
     const cam = payload?.camera
-        ? icon('camera-web-symbolic', 14)
+        ? glyphActor(Glyph.camera, 14)
         : new St.Widget({width: 1, height: 1});
     const mic = payload?.mic
-        ? icon('audio-input-microphone-symbolic', 14)
+        ? glyphActor(Glyph.mic, 14)
         : new St.Widget({width: 1, height: 1});
     const root = splitChrome({leading: cam, trailing: mic});
     root.update = next => {
         root.leading.replace(next?.camera
-            ? icon('camera-web-symbolic', 14)
+            ? glyphActor(Glyph.camera, 14)
             : new St.Widget({width: 1, height: 1}));
         root.trailing.replace(next?.mic
-            ? icon('audio-input-microphone-symbolic', 14)
+            ? glyphActor(Glyph.mic, 14)
             : new St.Widget({width: 1, height: 1}));
     };
     return root;
@@ -1189,7 +1208,7 @@ export function buildRecordingView(payload, _clockText, expanded) {
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        root.add_child(icon('media-record-symbolic', 16));
+        root.add_child(glyphActor(Glyph.record, 16));
         root.add_child(title);
         root.update = next => {
             if (next?.seconds != null) {

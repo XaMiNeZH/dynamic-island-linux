@@ -89,9 +89,9 @@ export class Presenter {
 
         this._key = key;
         this._view = actor;
-        const fade = this._island.geometry.height !== geom.height ||
+        const sizeChanged = this._island.geometry.height !== geom.height ||
             this._island.geometry.width !== geom.width;
-        this._island.setContent(actor, {fade});
+        this._island.setContent(actor, {fade: sizeChanged, delayReveal: sizeChanged});
         this._island.morphTo(geom, this._duration()).catch(() => {});
         this._armExpiry();
     }

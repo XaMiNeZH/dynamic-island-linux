@@ -7,7 +7,7 @@ export const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.dynamic-island';
 export const Geometry = {
     idle: {width: 88, height: 34, radius: 17, compact: true},
     compact: {width: 152, height: 34, radius: 17, compact: true},
-    osd: {width: 252, height: 34, radius: 17, compact: true},
+    osd: {width: 272, height: 34, radius: 17, compact: true},
     system: {width: 248, height: 44, radius: 22, compact: false},
     notification: {width: 300, height: 68, radius: 22, compact: false},
     mediaExpanded: {width: 520, height: 146, radius: 36, compact: false},

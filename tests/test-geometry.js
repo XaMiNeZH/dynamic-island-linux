@@ -71,6 +71,7 @@ assert(Geometry.compact.width === 152, 'compact media is wide enough for art plu
 assert(Geometry.mediaExpanded.width === 520, 'expanded media card is 520 wide');
 assert(Geometry.mediaExpanded.height === 146, 'expanded media card is 146 tall');
 assert(Geometry.mediaExpanded.radius === 36, 'expanded media keeps round corners');
+assert(Geometry.osd.width === 272, 'volume HUD is wide enough for a thick capsule');
 assert(Geometry.notification.width === 300, 'notification card is 300 wide');
 assert(Geometry.notification.height === 68, 'notification card is 68 tall');
 assert(Geometry.notification.radius === 22, 'notifications keep round corners');
