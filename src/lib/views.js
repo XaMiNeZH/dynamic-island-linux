@@ -386,14 +386,14 @@ function levelBar(value) {
         y_align: Clutter.ActorAlign.CENTER,
         y_expand: false,
         height: 8,
-        layout_manager: new Clutter.BinLayout(),
+        layout_manager: new Clutter.FixedLayout(),
     });
     const fill = new St.Widget({
         style_class: 'dynamic-island-level-fill',
         height: 8,
-        width: Math.max(8, Math.round(pct * 148)),
-        x_align: Clutter.ActorAlign.START,
-        y_align: Clutter.ActorAlign.CENTER,
+        width: 0,
+        x_expand: false,
+        y_expand: false,
     });
     track.add_child(fill);
 
@@ -402,18 +402,30 @@ function levelBar(value) {
             ? 'background-color: #ffe4d4;'
             : 'background-color: #ffffff;';
     };
-    paint(pct);
 
-    track.setLevel = next => {
+    let level = pct;
+    const apply = (next, animate = false) => {
         const n = Math.max(0, Math.min(1, next ?? 0));
-        const width = Math.max(track.width || 148, 80);
-        fill.ease({
-            width: Math.max(8, Math.round(n * width)),
-            duration: 140,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
+        level = n;
+        const width = progressFillWidth(n, track.width);
+        fill.set_position(0, 0);
+        fill.height = 8;
+        fill.remove_all_transitions();
+        fill.visible = width > 0;
+        if (animate && width > 0) {
+            fill.ease({
+                width,
+                duration: 140,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        } else {
+            fill.width = width;
+        }
         paint(n);
     };
+    track.connect('notify::width', () => apply(level));
+    track.setLevel = next => apply(next, true);
+    apply(level);
     return track;
 }
 

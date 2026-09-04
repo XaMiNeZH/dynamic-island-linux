@@ -98,6 +98,8 @@ assert(playbackNeedsResync(10_000_000, 13_000_000), 'a seek resyncs the clock');
 assert(progressFillWidth(0, 320) === 0, 'seek fill starts at the left edge');
 assert(progressFillWidth(0.5, 320) === 160, 'seek fill uses allocated rail width');
 assert(progressFillWidth(0.125, 320) === 40, 'seek fill advances before playback ends');
+assert(progressFillWidth(1, 148) === 148,
+    'OSD level fill reaches the entire allocated rail at 100%');
 assert(progressFillWidth(1.4, 320) === 320, 'seek fill is capped at rail width');
 
 assert(Geometry.mediaExpanded.width === 344, 'expanded media has compact player width');
