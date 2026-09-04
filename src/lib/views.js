@@ -19,6 +19,8 @@ import {requestPalette} from './palette-load.js';
 import {FALLBACK_PALETTE, mixHex} from './palette.js';
 import {
     displayedPlaybackUs,
+    formatMediaClockUs,
+    formatMediaRemainingUs,
     playbackNeedsResync,
     progressFillWidth,
 } from './utils.js';
@@ -916,6 +918,24 @@ export function buildMediaExpanded(payload) {
         x_expand: true,
         y_expand: false,
     });
+    const timeRow = new St.BoxLayout({
+        style_class: 'dynamic-island-seek-times',
+        x_expand: true,
+        y_expand: false,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const elapsed = label(formatMediaClockUs(positionUs), 'dynamic-island-seek-time');
+    const remaining = label(
+        formatMediaRemainingUs(positionUs, lengthUs),
+        'dynamic-island-seek-time is-remaining');
+    remaining.clutter_text.line_alignment = Pango.Alignment.RIGHT;
+
+    const previewTimes = nextFrac => {
+        const length = clock.lengthUs;
+        const pos = length > 0 ? nextFrac * length : 0;
+        elapsed.text = formatMediaClockUs(pos);
+        remaining.text = formatMediaRemainingUs(pos, length);
+    };
     const seek = dragBar('dynamic-island-seek', frac, {
         onCommit: next => {
             const length = root._payload?.lengthUs ?? 0;
@@ -923,8 +943,12 @@ export function buildMediaExpanded(payload) {
             clock.anchorMonoUs = GLib.get_monotonic_time();
             root._payload?.seek?.(next);
         },
+        onPreview: previewTimes,
     });
-    seekBlock.add_child(seek);
+    timeRow.add_child(elapsed);
+    timeRow.add_child(seek);
+    timeRow.add_child(remaining);
+    seekBlock.add_child(timeRow);
     col.add_child(seekBlock);
 
     const bottom = new St.BoxLayout({
@@ -993,6 +1017,8 @@ export function buildMediaExpanded(payload) {
         const pos = displayedPlaybackUs(clock, GLib.get_monotonic_time());
         const length = clock.lengthUs;
         seek.setLevel(length > 0 ? pos / length : 0, false);
+        elapsed.text = formatMediaClockUs(pos);
+        remaining.text = formatMediaRemainingUs(pos, length);
     };
     const stopTick = () => {
         if (!tickId)
