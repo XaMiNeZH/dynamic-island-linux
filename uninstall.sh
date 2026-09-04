@@ -18,4 +18,4 @@ unset SCHEMA_DIR
 
 echo "Removed ${UUID}."
 echo "Log out of Wayland and back in if the GNOME clock does not return immediately."
-echo "Disable also restores notification banners and the stock OSD."
+echo "Notifications remain native; disable also restores the stock OSD."

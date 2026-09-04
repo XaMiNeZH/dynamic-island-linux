@@ -13,7 +13,6 @@ import {
     mediaPlayGlyph,
     osdGlyph,
     paintGlyph,
-    volumeGlyph,
 } from './glyphs.js';
 import {requestPalette} from './palette-load.js';
 import {FALLBACK_PALETTE, mixHex} from './palette.js';
@@ -90,19 +89,6 @@ function glyphButton(kind, callback, extraClass = '', iconSize = 16) {
     return button;
 }
 
-function iconFromGicon(gicon, fallback, size = 20) {
-    const widget = new St.Icon({
-        icon_size: size,
-        style_class: 'dynamic-island-icon',
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    if (gicon)
-        widget.gicon = gicon;
-    else
-        widget.icon_name = fallback;
-    return widget;
-}
-
 function cssUrl(uri) {
     return `url("${String(uri).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`;
 }
@@ -160,7 +146,7 @@ function artClip(url, size, radius = null) {
         x_align: Clutter.ActorAlign.CENTER,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    clip.clip_to_allocation = false;
+    clip.clip_to_allocation = true;
     const fallback = artIcon(null, size);
 
     const applyStyle = image => {
@@ -741,116 +727,6 @@ export function buildMediaCompact(payload) {
     return root;
 }
 
-function eventY(event) {
-    try {
-        const coords = event.get_coords();
-        return coords[coords.length - 1] ?? coords[1] ?? 0;
-    } catch {
-        return 0;
-    }
-}
-
-function volumeOutput(payload, getPayload) {
-    const glyph = glyphActor(volumeGlyph(payload?.volume), 16);
-    const button = new St.Button({
-        style_class: 'dynamic-island-icon-button is-output dynamic-island-volume',
-        reactive: true,
-        can_focus: true,
-        track_hover: true,
-        x_align: Clutter.ActorAlign.END,
-        y_align: Clutter.ActorAlign.CENTER,
-        child: glyph,
-    });
-    // A press can originate on this DrawingArea rather than the St.Button.
-    // Mark both actors so Island can always defer to the volume control.
-    button._dynamicIslandControl = true;
-    glyph._dynamicIslandControl = true;
-
-    let level = Math.max(0, Math.min(1, Number(payload?.volume) || 0));
-    const setLevel = next => {
-        level = Math.max(0, Math.min(1, Number(next) || 0));
-        button.child.setGlyph(volumeGlyph(level));
-    };
-
-    const commit = next => {
-        const value = Math.max(0, Math.min(1, next));
-        level = value;
-        getPayload()?.setVolume?.(value);
-        setLevel(value);
-    };
-
-    button.connect('scroll-event', (_actor, event) => {
-        let delta = 0;
-        try {
-            const direction = event.get_scroll_direction();
-            if (direction === Clutter.ScrollDirection.UP)
-                delta = 0.06;
-            else if (direction === Clutter.ScrollDirection.DOWN)
-                delta = -0.06;
-            else if (direction === Clutter.ScrollDirection.SMOOTH) {
-                const [, dy] = event.get_scroll_delta();
-                delta = -dy * 0.06;
-            }
-        } catch {
-            return Clutter.EVENT_STOP;
-        }
-        commit(level + delta);
-        return Clutter.EVENT_STOP;
-    });
-
-    let dragging = false;
-    let capturedId = 0;
-    let startY = 0;
-    let startVol = 0;
-
-    const stopCapture = () => {
-        disconnectStage(capturedId);
-        capturedId = 0;
-    };
-
-    const finish = () => {
-        dragging = false;
-        stopCapture();
-        if (!adjusted)
-            getPayload()?.toggleMute?.();
-    };
-
-    const onCaptured = (_stage, event) => {
-        if (!dragging)
-            return Clutter.EVENT_PROPAGATE;
-        const type = event.type();
-        if (type === Clutter.EventType.MOTION || type === Clutter.EventType.TOUCH_UPDATE) {
-            const dy = startY - eventY(event);
-            adjusted ||= Math.abs(dy) > 2;
-            commit(startVol + dy / 140);
-            return Clutter.EVENT_STOP;
-        }
-        if (type === Clutter.EventType.BUTTON_RELEASE ||
-            type === Clutter.EventType.TOUCH_END ||
-            type === Clutter.EventType.TOUCH_CANCEL) {
-            finish();
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
-    };
-
-    button.connect('button-press-event', (_actor, event) => {
-        if (!isPrimaryPress(event))
-            return Clutter.EVENT_PROPAGATE;
-        dragging = true;
-        adjusted = false;
-        startY = eventY(event);
-        startVol = level;
-        stopCapture();
-        capturedId = connectStage('captured-event', onCaptured);
-        return Clutter.EVENT_STOP;
-    });
-
-    button.connect('destroy', finish);
-    button.setLevel = setLevel;
-    return button;
-}
-
 export function buildMediaExpanded(payload) {
     const root = new St.BoxLayout({
         style_class: 'dynamic-island-media-expanded',
@@ -858,6 +734,7 @@ export function buildMediaExpanded(payload) {
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
+    root.clip_to_allocation = true;
     root._payload = payload;
     root.suppressHoverScale = true;
 
@@ -877,6 +754,7 @@ export function buildMediaExpanded(payload) {
         y_align: Clutter.ActorAlign.CENTER,
         style_class: 'dynamic-island-media-copy',
     });
+    col.clip_to_allocation = true;
 
     const head = new St.BoxLayout({
         style_class: 'dynamic-island-media-head',
@@ -884,12 +762,14 @@ export function buildMediaExpanded(payload) {
         y_expand: false,
         y_align: Clutter.ActorAlign.START,
     });
+    head.clip_to_allocation = true;
     const textCol = new St.BoxLayout({
         vertical: true,
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
         style_class: 'dynamic-island-text-col is-media',
     });
+    textCol.clip_to_allocation = true;
     const title = marqueeLabel(payload?.title || 'Not playing', 'dynamic-island-title', {
         height: 16,
     });
@@ -956,15 +836,17 @@ export function buildMediaExpanded(payload) {
     seekBlock.add_child(timeRow);
     col.add_child(seekBlock);
 
-    const bottom = new St.BoxLayout({
+    const bottom = new St.Bin({
         style_class: 'dynamic-island-media-bottom',
         x_expand: true,
         y_expand: false,
         y_align: Clutter.ActorAlign.CENTER,
+        x_align: Clutter.ActorAlign.FILL,
     });
     const controls = new St.BoxLayout({
         style_class: 'dynamic-island-controls',
         x_expand: false,
+        x_align: Clutter.ActorAlign.CENTER,
         y_align: Clutter.ActorAlign.CENTER,
     });
     const prev = glyphButton(
@@ -985,31 +867,7 @@ export function buildMediaExpanded(payload) {
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
-
-    const volume = volumeOutput(payload, () => root._payload);
-    const showVolume = payload?.hasVolume === true;
-    volume.visible = showVolume;
-    volume.reactive = showVolume;
-    const leftSlot = new St.BoxLayout({
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    leftSlot.add_child(volume);
-    leftSlot.add_child(new St.Widget({
-        x_expand: true,
-        height: 1,
-        reactive: false,
-    }));
-    // Keep the trailing slot empty: this is a volume control, not AirPlay.
-    const rightSlot = new St.Widget({
-        x_expand: true,
-        height: 1,
-        reactive: false,
-    });
-
-    bottom.add_child(leftSlot);
-    bottom.add_child(controls);
-    bottom.add_child(rightSlot);
+    bottom.set_child(controls);
     col.add_child(bottom);
     root.add_child(col);
 
@@ -1069,44 +927,10 @@ export function buildMediaExpanded(payload) {
         if (!seek.dragging)
             paintClock();
         armTick();
-
-        const on = data?.hasVolume === true;
-        volume.visible = on;
-        volume.reactive = on;
-        if (on)
-            volume.setLevel(data.volume ?? 0);
     };
 
     armTick();
     root.connect('destroy', stopTick);
-    return root;
-}
-
-export function buildNotificationView(payload) {
-    const root = new St.BoxLayout({
-        style_class: 'dynamic-island-notification',
-        x_expand: true,
-        y_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    const badge = new St.Bin({
-        style_class: 'dynamic-island-app-badge',
-        width: 32,
-        height: 32,
-    });
-    badge.clip_to_allocation = true;
-    badge.set_child(iconFromGicon(payload?.gicon, payload?.iconName || 'dialog-information-symbolic', 22));
-    root.add_child(badge);
-
-    const textCol = new St.BoxLayout({
-        vertical: true,
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-        style_class: 'dynamic-island-text-col',
-    });
-    textCol.add_child(label(payload?.title || '', 'dynamic-island-title', true));
-    textCol.add_child(label(payload?.body || '', 'dynamic-island-subtitle', true));
-    root.add_child(textCol);
     return root;
 }
 
@@ -1260,8 +1084,6 @@ export function buildView(activity, clockText) {
         return expanded
             ? buildMediaExpanded(payload)
             : buildMediaCompact(payload);
-    case Kind.NOTIFICATION:
-        return buildNotificationView(payload);
     case Kind.VOLUME:
     case Kind.BRIGHTNESS:
     case Kind.MUTE:

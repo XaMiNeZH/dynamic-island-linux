@@ -55,7 +55,9 @@ export const Island = GObject.registerClass({
             y_expand: false,
             layout_manager: new Clutter.FixedLayout(),
         });
-        this._capsule.clip_to_allocation = false;
+        // The chrome is painted separately, so clip the whole actor tree at
+        // the capsule allocation as well as at the content allocation.
+        this._capsule.clip_to_allocation = true;
         try {
             this._capsule.set_offscreen_redirect(Clutter.OffscreenRedirect.DISABLED);
         } catch {

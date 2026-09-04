@@ -25,11 +25,8 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
 
         const takeover = new Adw.PreferencesGroup({
             title: _('Takeover'),
-            description: _('The island replaces the matching GNOME surface while enabled.'),
+            description: _('The island replaces only the matching system surfaces while enabled. Notifications stay native.'),
         });
-        takeover.add(this._switch(settings, 'suppress-banners',
-            _('Suppress notification banners'),
-            _('Show new notifications on the island instead of the default banner.')));
         takeover.add(this._switch(settings, 'takeover-osd',
             _('Take over volume and brightness OSD'),
             _('Hide the stock overlay and morph the island instead.')));
@@ -43,9 +40,6 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
             _('Morph duration'),
             _('Milliseconds for the pill to change size.'),
             120, 800, 20));
-        motion.add(this._spin(settings, 'notification-timeout',
-            _('Notification hold time'),
-            null, 1500, 10000, 100));
         motion.add(this._spin(settings, 'osd-timeout',
             _('OSD hold time'),
             null, 600, 5000, 100));
@@ -79,7 +73,6 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
             title: _('Live activities'),
             description: _('Each source can morph the island. Turn one off if you want the stock GNOME surface back.'),
         });
-        group.add(this._switch(settings, 'enable-notifications', _('Notifications'), null));
         group.add(this._switch(settings, 'enable-media', _('Media playback (MPRIS)'), null));
         group.add(this._switch(settings, 'enable-osd', _('Volume, brightness, mute'), null));
         group.add(this._switch(settings, 'enable-battery', _('Charging'), null));

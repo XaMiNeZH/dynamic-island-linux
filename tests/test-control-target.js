@@ -16,34 +16,28 @@ function assert(condition, message) {
 }
 
 const capsule = {};
-const markedVolumeButton = {
-    _dynamicIslandControl: true,
+const transportButton = {
     get_parent: () => capsule,
 };
-const volumeButton = {
-    get_parent: () => capsule,
+const transportGlyph = {
+    get_parent: () => transportButton,
 };
-const volumeGlyph = {
-    get_parent: () => volumeButton,
-};
-const classOnlyVolume = {
-    has_style_class_name: name => name === 'dynamic-island-volume',
+const seekTrack = {
+    has_style_class_name: name => name === 'dynamic-island-seek',
     get_parent: () => capsule,
 };
 const plainContent = {
     get_parent: () => capsule,
 };
 
-assert(isControlActor(markedVolumeButton, capsule),
-    'the marked volume button is an island control target');
-assert(isControlActor(volumeButton, capsule, actor => actor === volumeButton),
-    'the volume St.Button is an island control target');
-assert(isControlActor(volumeGlyph, capsule, actor => actor === volumeButton),
-    'a DrawingArea child resolves to its volume button parent');
-assert(isControlActor(classOnlyVolume, capsule),
-    'the volume style class is an island control target');
-assert(isControlTarget({get_source: () => volumeGlyph}, capsule, actor => actor === volumeButton),
-    'an event from the volume glyph resolves as a control target');
+assert(isControlActor(transportButton, capsule, actor => actor === transportButton),
+    'a transport button is an island control target');
+assert(isControlActor(transportGlyph, capsule, actor => actor === transportButton),
+    'a DrawingArea child resolves to its transport button parent');
+assert(isControlActor(seekTrack, capsule),
+    'the seek style class is an island control target');
+assert(isControlTarget({get_source: () => transportGlyph}, capsule, actor => actor === transportButton),
+    'an event from a transport glyph resolves as a control target');
 assert(!isControlActor(plainContent, capsule),
     'ordinary capsule content is not a control target');
 

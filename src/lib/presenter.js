@@ -44,16 +44,6 @@ export class Presenter {
             return;
         }
 
-        if (cur.kind === Kind.NOTIFICATION) {
-            try {
-                cur.payload?.activate?.();
-            } catch {
-                // notification already gone
-            }
-            this._stack.remove(cur.id);
-            return;
-        }
-
         if (cur.kind === Kind.MEDIA || cur.kind === Kind.RECORDING) {
             this._stack.toggleExpanded();
             return;

@@ -12,7 +12,6 @@ import {Presenter} from './lib/presenter.js';
 import {BatterySource} from './lib/sources/battery.js';
 import {BluetoothSource} from './lib/sources/bluetooth.js';
 import {MprisSource} from './lib/sources/mpris.js';
-import {NotificationSource} from './lib/sources/notifications.js';
 import {OsdSource} from './lib/sources/osd.js';
 import {PrivacySource} from './lib/sources/privacy.js';
 
@@ -24,6 +23,10 @@ export default class DynamicIslandExtension extends Extension {
         this._clock = new ClockSource(this._settings);
         this._island = new Island(this);
         this._hiddenMedia = [];
+        // Older versions could take over MessageTray. Never carry that
+        // setting forward: notification banners remain GNOME-owned.
+        if (Main.messageTray)
+            Main.messageTray.bannerBlocked = false;
 
         this._presenter = new Presenter({
             island: this._island,
@@ -34,7 +37,6 @@ export default class DynamicIslandExtension extends Extension {
         });
 
         this._sources = [];
-        this._addSource(() => new NotificationSource({stack: this._stack, settings: this._settings}));
         this._addSource(() => new MprisSource({stack: this._stack, settings: this._settings}));
         this._addSource(() => new OsdSource({stack: this._stack, settings: this._settings}));
         this._addSource(() => new BatterySource({stack: this._stack, settings: this._settings}));

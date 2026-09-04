@@ -24,9 +24,9 @@ assert(easeOutCubic(1) === 1, 'cubic end');
 assert(Math.abs(easeOutBack(1) - 1) < 1e-9, 'back end');
 assert(easeOutBack(0.8) > 1, 'back overshoots before settle');
 
-const mid = morphFrame(Geometry.idle, Geometry.notification, 0.5);
+const mid = morphFrame(Geometry.idle, Geometry.system, 0.5);
 assert(mid.width > Geometry.idle.width, 'morph grows width');
-assert(mid.width < Geometry.notification.width * 1.2, 'morph stays bounded');
+assert(mid.width < Geometry.system.width * 1.2, 'morph stays bounded');
 
 assert(sameGeometry(Geometry.idle, {...Geometry.idle}), 'sameGeometry true');
 assert(!sameGeometry(Geometry.idle, Geometry.osd), 'sameGeometry false');
@@ -34,7 +34,6 @@ assert(!sameGeometry(Geometry.idle, Geometry.osd), 'sameGeometry false');
 assert(geometryFor('idle').width === Geometry.idle.width, 'idle geom');
 assert(geometryFor('media', false).width === Geometry.compact.width, 'media compact');
 assert(geometryFor('media', true).width === Geometry.mediaExpanded.width, 'media expanded');
-assert(geometryFor('notification').height > geometryFor('idle').height, 'notification is taller');
 assert(geometryFor('volume').height === geometryFor('idle').height, 'osd stays compact height');
 assert(geometryFor('media', false).width > geometryFor('idle').width, 'compact media is wider');
 assert(activityKey({id: 'media', kind: 'media', expanded: false}) === 'media:media:0', 'activity key compact');

@@ -4,8 +4,6 @@ const CONTROL_CLASSES = [
     'dynamic-island-icon-button',
     'is-compact-play',
     'dynamic-island-seek',
-    'dynamic-island-volume',
-    'is-output',
     'dynamic-island-slider',
 ];
 

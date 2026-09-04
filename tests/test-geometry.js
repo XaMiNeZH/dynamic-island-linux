@@ -48,10 +48,6 @@ assert(compact.width === Geometry.compact.width, 'media compact keeps its width'
 const osd = fitGeometryToPanel(geometryFor('volume'), 32);
 assert(osd.height === idle.height, 'osd height matches idle after fit');
 
-const notification = fitGeometryToPanel(Geometry.notification, 32);
-assert(notification.height === Geometry.notification.height, 'expanded notification keeps designed height');
-assert(isExpandedGeometry(notification), 'notification stays expanded');
-
 const system = fitGeometryToPanel(Geometry.system, 32);
 assert(system.height === Geometry.system.height, 'system toast keeps designed height');
 assert(isExpandedGeometry(system), 'system toast is expanded');
@@ -72,9 +68,6 @@ assert(Geometry.mediaExpanded.width === 344, 'expanded media card is compact');
 assert(Geometry.mediaExpanded.height === 84, 'expanded media card is content-filled');
 assert(Geometry.mediaExpanded.radius === 22, 'expanded media keeps moderate round corners');
 assert(Geometry.osd.width === 272, 'volume HUD is wide enough for a thick capsule');
-assert(Geometry.notification.width === 272, 'notification card matches the compact family');
-assert(Geometry.notification.height === 56, 'notification card avoids an oversized toast');
-assert(Geometry.notification.radius === 18, 'notifications keep moderate round corners');
 assert(Geometry.idle.width === 88, 'idle notch is a small empty pill');
 assert(geometryFor('idle').width === 88, 'idle geometry is the empty notch');
 assert(geometryFor('media', false).width === Geometry.compact.width, 'hover stays on compact geometry');

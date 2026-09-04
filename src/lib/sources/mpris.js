@@ -5,7 +5,6 @@ import GLib from 'gi://GLib';
 
 import {Kind} from '../activity-stack.js';
 import {SourceTracker} from '../utils.js';
-import {OutputVolume, selectVolumeControl} from './output-volume.js';
 
 const MPRIS_PREFIX = 'org.mpris.MediaPlayer2.';
 
@@ -50,7 +49,6 @@ const PlayerIface = `
     <property name="CanGoNext" type="b" access="read"/>
     <property name="CanGoPrevious" type="b" access="read"/>
     <property name="CanPlay" type="b" access="read"/>
-    <property name="Volume" type="d" access="readwrite"/>
   </interface>
 </node>`;
 
@@ -71,7 +69,6 @@ const PropertiesIface = `
 </node>`;
 
 const SEEK_HOLD_US = 1_000_000;
-const VOLUME_HOLD_US = 400_000;
 const POSITION_REFRESH_MS = 250;
 
 const DBusProxy = Gio.DBusProxy.makeProxyWrapper(DBusIface);
@@ -128,10 +125,7 @@ class Player {
         this.lengthUs = 0;
         this.positionUs = 0;
         this.trackId = '';
-        this.hasVolume = false;
-        this.volume = null;
         this._seekHoldUntil = 0;
-        this._volumeHoldUntil = 0;
         this._positionEpoch = 0;
         this._hasPosition = false;
         this._positionRequest = false;
@@ -227,37 +221,6 @@ class Player {
             });
     }
 
-    _volumeFromProxy() {
-        try {
-            const names = this._proxy.get_cached_property_names?.();
-            const list = names ? Array.from(names) : [];
-            if (list.length && !list.includes('Volume'))
-                return {present: false};
-            const cached = this._proxy.get_cached_property?.('Volume');
-            if (cached == null)
-                return {present: false};
-            const value = Number(cached.deep_unpack?.() ?? cached.unpack());
-            if (!Number.isFinite(value))
-                return {present: false};
-            return {present: true, value};
-        } catch {
-            return {present: false};
-        }
-    }
-
-    _readVolume() {
-        if (this._volumeHoldUntil && GLib.get_monotonic_time() < this._volumeHoldUntil)
-            return;
-        const found = this._volumeFromProxy();
-        if (!found.present) {
-            this.hasVolume = false;
-            this.volume = null;
-            return;
-        }
-        this.hasVolume = true;
-        this.volume = Math.max(0, Math.min(1, found.value));
-    }
-
     _update() {
         const metadata = unpackMetadata(this._proxy.Metadata);
         const artists = metadata['xesam:artist'];
@@ -277,7 +240,6 @@ class Player {
         this.canGoNext = !!this._proxy.CanGoNext;
         this.canGoPrevious = !!this._proxy.CanGoPrevious;
         this._readPosition();
-        this._readVolume();
         this._onChange?.(this);
     }
 
@@ -316,32 +278,6 @@ class Player {
         });
     }
 
-    setVolume(level) {
-        if (!this.hasVolume)
-            return false;
-        const value = Math.max(0, Math.min(1, Number(level)));
-        if (!Number.isFinite(value))
-            return false;
-        this.volume = value;
-        this._volumeHoldUntil = GLib.get_monotonic_time() + VOLUME_HOLD_US;
-        this._onChange?.(this);
-        if (!this._properties)
-            return false;
-
-        this._properties.SetAsync(
-            'org.mpris.MediaPlayer2.Player',
-            'Volume',
-            new GLib.Variant('d', value))
-            .catch(() => {
-                // Do not leave an optimistic glyph behind when a player
-                // advertises Volume but rejects writes.
-                this._volumeHoldUntil = 0;
-                this._readVolume();
-                this._onChange?.(this);
-            });
-        return true;
-    }
-
     destroy() {
         if (this._propId)
             this._proxy.disconnect(this._propId);
@@ -359,7 +295,6 @@ export class MprisSource {
         this._settings = settings;
         this._tracker = new SourceTracker();
         this._players = new Map();
-        this._output = new OutputVolume(() => this._publish());
 
         this._tracker.connect(settings, 'changed::enable-media', () => this._publish());
 
@@ -457,7 +392,6 @@ export class MprisSource {
         }
 
         this._ensurePositionTimer(true);
-        const volume = selectVolumeControl(this._output, player);
         this._stack.upsert({
             id: 'media',
             kind: Kind.MEDIA,
@@ -471,14 +405,10 @@ export class MprisSource {
                 playing: player.playing,
                 lengthUs: player.lengthUs,
                 positionUs: player.positionUs,
-                hasVolume: volume.hasVolume,
-                volume: volume.volume,
                 playPause: () => player.playPause(),
                 next: () => player.next(),
                 previous: () => player.previous(),
                 seek: frac => player.seekFraction(frac),
-                setVolume: level => volume.setVolume(level),
-                toggleMute: () => volume.toggleMute?.() ?? false,
             },
         });
     }
@@ -494,8 +424,6 @@ export class MprisSource {
         for (const player of this._players.values())
             player.destroy();
         this._players.clear();
-        this._output?.destroy();
-        this._output = null;
         this._tracker.destroy();
         this._stack.remove('media');
         this._stack = null;
