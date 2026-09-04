@@ -9,8 +9,8 @@ export const Geometry = {
     compact: {width: 148, height: 34, radius: 17, compact: true},
     osd: {width: 252, height: 34, radius: 17, compact: true},
     system: {width: 248, height: 44, radius: 22, compact: false},
-    notification: {width: 348, height: 80, radius: 26, compact: false},
-    mediaExpanded: {width: 400, height: 180, radius: 38, compact: false},
+    notification: {width: 300, height: 68, radius: 22, compact: false},
+    mediaExpanded: {width: 348, height: 148, radius: 32, compact: false},
 };
 
 /** Compact pills sit inside the panel with this inset on top and bottom. */

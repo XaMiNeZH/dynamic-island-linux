@@ -681,7 +681,7 @@ export function buildMediaExpanded(payload) {
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    const art = artClip(payload?.artUrl, 52);
+    const art = artClip(payload?.artUrl, 44);
     art.setMedia(payload);
     top.add_child(art);
 
@@ -753,17 +753,17 @@ export function buildMediaExpanded(payload) {
         'media-skip-backward-symbolic',
         () => root._payload?.previous?.(),
         'is-transport-skip',
-        18);
+        16);
     const play = iconButton(
         mediaPlayIcon(payload?.playing === true),
         () => root._payload?.playPause?.(),
         'is-transport-play',
-        24);
+        20);
     const next = iconButton(
         'media-skip-forward-symbolic',
         () => root._payload?.next?.(),
         'is-transport-skip',
-        18);
+        16);
     controls.add_child(prev);
     controls.add_child(play);
     controls.add_child(next);
@@ -806,11 +806,11 @@ export function buildNotificationView(payload) {
     });
     const badge = new St.Bin({
         style_class: 'dynamic-island-app-badge',
-        width: 40,
-        height: 40,
+        width: 32,
+        height: 32,
     });
     badge.clip_to_allocation = true;
-    badge.set_child(iconFromGicon(payload?.gicon, payload?.iconName || 'dialog-information-symbolic', 28));
+    badge.set_child(iconFromGicon(payload?.gicon, payload?.iconName || 'dialog-information-symbolic', 22));
     root.add_child(badge);
 
     const textCol = new St.BoxLayout({
