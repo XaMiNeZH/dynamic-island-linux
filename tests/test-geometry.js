@@ -45,6 +45,12 @@ const compact = fitGeometryToPanel(Geometry.compact, 32);
 assert(compact.height === idle.height, 'media compact matches idle height');
 assert(compact.width === Geometry.compact.width, 'media compact keeps its width');
 
+const charging = fitGeometryToPanel(geometryFor('charging'), 32);
+assert(charging.compact === true, 'charging stays compact');
+assert(charging.height === idle.height, 'charging height matches idle after fit');
+assert(charging.radius === idle.radius, 'charging keeps a stadium radius after fit');
+assert(charging.width > idle.width, 'charging is wider than the idle notch');
+
 const osd = fitGeometryToPanel(geometryFor('volume'), 32);
 assert(osd.height === idle.height, 'osd height matches idle after fit');
 

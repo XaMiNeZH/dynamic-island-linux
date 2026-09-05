@@ -30,6 +30,7 @@ try {
     const cr = new cairo.Context(surface);
     for (const kind of Object.values(Glyph))
         paintGlyph(cr, kind, 32);
+    paintGlyph(cr, Glyph.batteryCharge, 32, '#30d158');
     assert(true, 'filled glyphs paint without throwing');
 } catch (error) {
     print(`glyphs cairo skip: ${error.message}`);

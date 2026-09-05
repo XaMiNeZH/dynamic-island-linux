@@ -306,6 +306,23 @@
     spacing: 6px;
 }
 
+.dynamic-island-charging {
+    spacing: 0;
+}
+
+.dynamic-island-charging-trailing {
+    spacing: 6px;
+}
+
+.dynamic-island-charging-percent {
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.2px;
+    color: #30d158;
+    font-feature-settings: "tnum" 1;
+    font-variant-numeric: tabular-nums;
+}
+
 .dynamic-island-idle {
     spacing: 0;
 }

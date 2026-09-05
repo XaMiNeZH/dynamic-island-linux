@@ -44,6 +44,19 @@ function fillWhite(cr, a = 1) {
     cr.setSourceRGBA(1, 1, 1, a);
 }
 
+function fillColor(cr, color) {
+    if (typeof color !== 'string' || !/^#[\da-f]{6}$/i.test(color)) {
+        fillWhite(cr);
+        return;
+    }
+    const value = Number.parseInt(color.slice(1), 16);
+    cr.setSourceRGBA(
+        ((value >> 16) & 0xff) / 255,
+        ((value >> 8) & 0xff) / 255,
+        (value & 0xff) / 255,
+        1);
+}
+
 function roundedRect(cr, x, y, w, h, r) {
     const radius = Math.min(r, w / 2, h / 2);
     cr.newSubPath();
@@ -55,9 +68,9 @@ function roundedRect(cr, x, y, w, h, r) {
 }
 
 /** Filled SF-style marks. `cr` is a Cairo context; origin is the glyph box. */
-export function paintGlyph(cr, kind, size) {
+export function paintGlyph(cr, kind, size, color = null) {
     const s = Math.max(8, Number(size) || 16);
-    fillWhite(cr);
+    fillColor(cr, color);
     cr.save();
     cr.translate(s * 0.12, s * 0.12);
     const u = s * 0.76;

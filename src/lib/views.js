@@ -47,7 +47,7 @@ function label(text, styleClass, expand = false) {
     return widget;
 }
 
-function glyphActor(kind, size = 16) {
+function glyphActor(kind, size = 16, color = null) {
     const area = new St.DrawingArea({
         width: size,
         height: size,
@@ -57,10 +57,11 @@ function glyphActor(kind, size = 16) {
     });
     area._glyph = kind;
     area._glyphSize = size;
+    area._glyphColor = color;
     area.connect('repaint', a => {
         const cr = a.get_context();
         try {
-            paintGlyph(cr, a._glyph, a._glyphSize);
+            paintGlyph(cr, a._glyph, a._glyphSize, a._glyphColor);
         } finally {
             cr.$dispose?.();
         }
@@ -979,24 +980,28 @@ export function buildOsdView(payload) {
 }
 
 export function buildChargingView(payload) {
-    const charging = payload?.charging !== false;
     const percent = Math.round(payload?.percent ?? 0);
-    const title = label(charging ? `Charging  ${percent}%` : `${percent}%`, 'dynamic-island-title');
-    const glyph = glyphActor(charging ? Glyph.batteryCharge : Glyph.battery, 18);
-    const root = new St.BoxLayout({
-        style_class: 'dynamic-island-system',
-        x_expand: true,
-        y_expand: true,
-        x_align: Clutter.ActorAlign.CENTER,
+    const title = label('Charging', 'dynamic-island-title dynamic-island-charging-title');
+    const pct = label(`${percent}%`, 'dynamic-island-charging-percent');
+    const glyph = glyphActor(Glyph.batteryCharge, 18, '#30d158');
+    const trailing = new St.BoxLayout({
+        style_class: 'dynamic-island-charging-trailing',
         y_align: Clutter.ActorAlign.CENTER,
     });
-    root.add_child(glyph);
+    trailing.add_child(pct);
+    trailing.add_child(glyph);
+    const root = new St.BoxLayout({
+        style_class: 'dynamic-island-charging',
+        x_expand: true,
+        y_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
     root.add_child(title);
+    root.add_child(new St.Widget({x_expand: true, height: 1}));
+    root.add_child(trailing);
     root.update = next => {
-        const on = next?.charging !== false;
         const n = Math.round(next?.percent ?? 0);
-        glyph.setGlyph(on ? Glyph.batteryCharge : Glyph.battery);
-        title.text = on ? `Charging  ${n}%` : `${n}%`;
+        pct.text = `${n}%`;
     };
     return root;
 }
