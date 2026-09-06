@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {Kind, Priority} from '../src/lib/activity-stack.js';
+import {Geometry, geometryFor, isExpandedGeometry} from '../src/lib/constants.js';
 import {isFocusActive} from '../src/lib/focus.js';
+import {privacyHeadline} from '../src/lib/privacy.js';
 
 let passed = 0;
 let failed = 0;
@@ -24,6 +26,18 @@ assert(Priority[Kind.FOCUS] > Priority[Kind.MEDIA],
     'focus remains visible ahead of ordinary media');
 assert(Priority[Kind.FOCUS] < Priority[Kind.PRIVACY],
     'privacy indicators retain their higher-priority safety signal');
+assert(geometryFor('focus').width === Geometry.charging.width,
+    'focus uses the charging compact pill width');
+assert(geometryFor('focus').height === Geometry.charging.height,
+    'focus stays bar height like charging');
+assert(!isExpandedGeometry(geometryFor('privacy', true)),
+    'privacy mic/cam cannot become a system card');
+assert(geometryFor('privacy').width === Geometry.charging.width,
+    'privacy uses the charging compact pill family');
+assert(privacyHeadline({mic: true}) === 'Microphone', 'mic-only privacy names the microphone');
+assert(privacyHeadline({camera: true}) === 'Camera', 'camera-only privacy names the camera');
+assert(privacyHeadline({camera: true, mic: true}) === 'Camera · Mic',
+    'combined privacy keeps a charging-style headline');
 
 print(`focus: ${passed} passed, ${failed} failed`);
 if (failed)
