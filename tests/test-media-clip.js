@@ -42,7 +42,8 @@ assert(expanded.includes('col.clip_to_allocation = true') &&
     'every expanded title ancestor clips its allocation');
 assert(marquee.includes('clip.clip_to_allocation = true') &&
     marquee.includes('first.clip_to_allocation = true') &&
-    marquee.includes('second.clip_to_allocation = true'),
+    marquee.includes('second.clip_to_allocation = true') &&
+    marquee.includes('Pango.EllipsizeMode.END'),
     'both marquee copies stay clipped while translating');
 assert(css.includes('.dynamic-island-media-expanded {\n    spacing: 10px;\n    min-width: 0;') &&
     css.includes('.dynamic-island-media-compact {\n    min-width: 0;') &&
