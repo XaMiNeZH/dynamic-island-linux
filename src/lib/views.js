@@ -474,10 +474,12 @@ function mediaVolumeControl(volume) {
         'is-volume-mute',
         13);
     mute.accessible_name = 'Mute output';
+    mute._dynamicIslandControl = true;
     const slider = dragBar('dynamic-island-volume', volume?.level ?? 0, {
         vertical: true,
         onPreview: next => state?.setLevel?.(next),
     });
+    root._dynamicIslandControl = true;
     slider._dynamicIslandControl = true;
 
     slider.connect('scroll-event', (_actor, event) => {
