@@ -555,6 +555,8 @@ function marqueeLabel(text, styleClass, {expand = true, height = 18} = {}) {
 
     const first = copy();
     const second = copy();
+    first.clip_to_allocation = true;
+    second.clip_to_allocation = true;
     clip.add_child(first);
     clip.add_child(second);
 
@@ -709,6 +711,7 @@ export function buildMediaCompact(payload) {
 
     const root = splitChrome({leading: art, trailing: stack});
     root.add_style_class_name('dynamic-island-media-compact');
+    root.clip_to_allocation = true;
     root.suppressHoverScale = true;
     root._payload = payload;
     root._hover = false;
