@@ -7,6 +7,8 @@ const CONTROL_CLASSES = [
     'dynamic-island-seek',
     'dynamic-island-slider',
     'dynamic-island-media-volume',
+    'dynamic-island-output',
+    'dynamic-island-sink-row',
 ];
 
 function hasControlClass(actor) {

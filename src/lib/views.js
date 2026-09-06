@@ -914,6 +914,28 @@ export function buildMediaExpanded(payload) {
     head.add_child(eq);
     col.add_child(head);
 
+    let pickingOutput = false;
+    const outputButton = new St.Button({
+        style_class: 'dynamic-island-output',
+        x_align: Clutter.ActorAlign.START,
+        y_align: Clutter.ActorAlign.CENTER,
+        can_focus: true,
+        reactive: true,
+        track_hover: true,
+    });
+    outputButton._dynamicIslandControl = true;
+    const outputName = label('', 'dynamic-island-output-label');
+    outputButton.set_child(outputName);
+    const sinkList = new St.BoxLayout({
+        style_class: 'dynamic-island-sink-list',
+        vertical: true,
+        x_expand: true,
+        visible: false,
+    });
+    sinkList._dynamicIslandControl = true;
+    col.add_child(outputButton);
+    col.add_child(sinkList);
+
     const lengthUs = payload?.lengthUs ?? 0;
     const positionUs = payload?.positionUs ?? 0;
     const frac = lengthUs > 0 ? positionUs / lengthUs : 0;
@@ -1000,6 +1022,53 @@ export function buildMediaExpanded(payload) {
     col.add_child(bottom);
     root.add_child(col);
 
+    const showPicker = picking => {
+        sinkList.visible = picking;
+        seekBlock.visible = !picking;
+        bottom.visible = !picking;
+        outputButton.visible = outputButton.visible && !picking;
+    };
+    const syncOutput = volume => {
+        const outputs = volume?.outputs ?? [];
+        const active = outputs.find(row => row.active) ?? outputs[0];
+        outputName.text = active?.label || '';
+        const showChip = !!volume?.available && outputs.length > 0;
+        outputButton.visible = showChip && !pickingOutput;
+        while (sinkList.get_n_children())
+            sinkList.get_child_at_index(0).destroy();
+        for (const row of outputs) {
+            const rowButton = new St.Button({
+                style_class: `dynamic-island-sink-row${row.active ? ' is-active' : ''}`,
+                label: row.label,
+                x_align: Clutter.ActorAlign.START,
+                x_expand: true,
+                reactive: true,
+                can_focus: true,
+                track_hover: true,
+            });
+            rowButton._dynamicIslandControl = true;
+            rowButton.connect('clicked', () => {
+                volume?.setOutput?.(row.id);
+                pickingOutput = false;
+                showPicker(false);
+            });
+            sinkList.add_child(rowButton);
+        }
+        if (outputs.length < 2)
+            pickingOutput = false;
+        showPicker(pickingOutput && outputs.length > 1);
+        outputButton.visible = showChip && !pickingOutput;
+    };
+    outputButton.connect('clicked', () => {
+        const outputs = root._payload?.volume?.outputs ?? [];
+        if (outputs.length < 2)
+            return;
+        pickingOutput = !pickingOutput;
+        showPicker(pickingOutput);
+        outputButton.visible = !pickingOutput;
+    });
+    syncOutput(payload?.volume);
+
     const refreshPalette = attachPalette(eq, payload?.artUrl);
 
     let tickId = 0;
@@ -1035,6 +1104,7 @@ export function buildMediaExpanded(payload) {
         root._payload = data;
         art.setMedia(data);
         setVolume(data?.volume);
+        syncOutput(data?.volume);
         title.setText(data?.title || 'Not playing');
         artist.setText(data?.artist || '');
         play.setGlyph(mediaPlayGlyph(data?.playing === true));

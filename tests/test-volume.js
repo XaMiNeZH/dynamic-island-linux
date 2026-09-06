@@ -3,6 +3,9 @@
 
 import {
     clampVolumeFraction,
+    describeSinks,
+    sinkIdentity,
+    sinkLabel,
     volumeFraction,
     volumeTarget,
 } from '../src/lib/volume.js';
@@ -30,6 +33,17 @@ assert(volumeTarget(0, maximum) === 0, 'zero drag writes silence');
 assert(volumeTarget(1, maximum) === maximum, 'full drag writes the normal maximum');
 assert(volumeTarget(0.5, maximum) === maximum / 2, 'midpoint drag writes half volume');
 assert(volumeTarget(2, maximum) === maximum, 'drag target caps at normal maximum');
+
+const read = (sink, property) => sink[property];
+const speakers = {id: 1, description: 'Built-in Speakers', name: 'alsa_output'};
+const headphones = {id: 2, description: 'USB Headset', name: 'usb_output'};
+assert(sinkIdentity(speakers, read) === 1, 'sink identity prefers the Gvc id');
+assert(sinkLabel(speakers, read) === 'Built-in Speakers', 'sink label prefers the description');
+assert(describeSinks([speakers, headphones], headphones, read).find(row => row.active)?.id === 2,
+    'the default Gvc sink is marked active');
+assert(describeSinks([speakers, headphones], headphones, read).length === 2,
+    'every real Gvc sink is offered');
+assert(describeSinks([], speakers, read).length === 0, 'a missing sink list stays empty');
 
 print(`volume: ${passed} passed, ${failed} failed`);
 if (failed)

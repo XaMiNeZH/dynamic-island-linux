@@ -18,6 +18,38 @@ export function volumeTarget(fraction, maximum) {
     return Math.round(clampVolumeFraction(fraction) * max);
 }
 
+export function sinkIdentity(sink, read) {
+    if (!sink)
+        return null;
+    const id = read(sink, 'id', 'get_id');
+    if (id != null && id !== '')
+        return id;
+    const index = read(sink, 'index', 'get_index');
+    return index == null ? null : index;
+}
+
+export function sinkLabel(sink, read) {
+    return String(read(sink, 'description', 'get_description') ||
+        read(sink, 'name', 'get_name') ||
+        'Output');
+}
+
+export function describeSinks(sinks, defaultSink, read) {
+    const defaultId = sinkIdentity(defaultSink, read);
+    const rows = [];
+    for (const sink of sinks ?? []) {
+        const id = sinkIdentity(sink, read);
+        if (id == null)
+            continue;
+        rows.push({
+            id,
+            label: sinkLabel(sink, read),
+            active: defaultId != null && id === defaultId,
+        });
+    }
+    return rows;
+}
+
 /**
  * Owns the real GNOME default output stream. It deliberately reports no
  * control until Gvc returns an actual sink, so the media view never presents
@@ -50,8 +82,19 @@ export class VolumeControl {
             return;
         try {
             this._control = new Gvc.MixerControl({name: 'dynamic-island-volume'});
-            for (const signal of ['state-changed', 'default-sink-changed', 'stream-changed'])
-                this._tracker.connect(this._control, signal, () => this._sync());
+            for (const signal of [
+                'state-changed',
+                'default-sink-changed',
+                'stream-changed',
+                'stream-added',
+                'stream-removed',
+            ]) {
+                try {
+                    this._tracker.connect(this._control, signal, () => this._sync());
+                } catch {
+                    // This MixerControl build does not emit the signal.
+                }
+            }
             this._control.open();
             this._sync();
         } catch {
@@ -100,8 +143,11 @@ export class VolumeControl {
             available: true,
             level: volumeFraction(volume, maximum),
             muted,
+            outputs: describeSinks(this._iterSinks(), sink, (stream, property, getter) =>
+                this._read(stream, property, getter)),
             setLevel: fraction => this.setLevel(fraction),
             toggleMuted: () => this.toggleMuted(),
+            setOutput: id => this.setOutput(id),
         });
     }
 
@@ -109,7 +155,8 @@ export class VolumeControl {
         const previous = this._snapshot;
         const changed = previous.available !== next.available ||
             previous.level !== next.level ||
-            previous.muted !== next.muted;
+            previous.muted !== next.muted ||
+            outputsKey(previous.outputs) !== outputsKey(next.outputs);
         this._snapshot = next;
         if (changed)
             this._onChange?.();
@@ -142,6 +189,38 @@ export class VolumeControl {
         this._sync();
     }
 
+    _iterSinks() {
+        try {
+            const list = this._control?.get_sinks?.() ?? [];
+            if (Array.isArray(list))
+                return list;
+            if (list && typeof list[Symbol.iterator] === 'function')
+                return [...list];
+            const length = Number(list.length) || 0;
+            const rows = [];
+            for (let i = 0; i < length; i++)
+                rows.push(list[i]);
+            return rows;
+        } catch {
+            return [];
+        }
+    }
+
+    setOutput(id) {
+        if (id == null || !this._control)
+            return;
+        try {
+            const match = this._iterSinks().find(sink =>
+                sinkIdentity(sink, (stream, property, getter) =>
+                    this._read(stream, property, getter)) === id);
+            if (match)
+                this._control.set_default_sink?.(match);
+        } catch {
+            // The requested sink disappeared before the default could change.
+        }
+        this._sync();
+    }
+
     destroy() {
         this._destroyed = true;
         this._tracker.destroy();
@@ -154,4 +233,8 @@ export class VolumeControl {
         this._sink = null;
         this._onChange = null;
     }
+}
+
+function outputsKey(outputs) {
+    return (outputs ?? []).map(row => `${row.id}:${row.active ? 1 : 0}`).join('|');
 }
