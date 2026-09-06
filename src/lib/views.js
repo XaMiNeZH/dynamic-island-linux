@@ -28,7 +28,7 @@ import {
     BAR_THICKNESS,
     DOT_HEIGHT,
     barHeightPx,
-    proceduralLevel,
+    currentBarLevel,
 } from './waveform.js';
 
 function label(text, styleClass, expand = false) {
@@ -462,7 +462,7 @@ function equalizer(playing, options = {}) {
     const paint = () => {
         const seconds = GLib.get_monotonic_time() / 1_000_000;
         for (let i = 0; i < bars.length; i++) {
-            const level = proceduralLevel(i, seconds, {playing: box._playing});
+            const level = currentBarLevel(i, seconds, {playing: box._playing});
             const height = barHeightPx(level, stripH);
             const bar = bars[i];
             bar.remove_all_transitions();

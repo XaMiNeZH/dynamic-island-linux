@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import {fftBarLevel, mixBarLevel} from './fft.js';
+
 /** Six center-growing pills, silence = a row of dots. */
 export const BAR_COUNT = 6;
 export const BAR_THICKNESS = 3;
@@ -15,6 +17,10 @@ export function proceduralLevel(index, seconds, {playing = true} = {}) {
     const phase = PHASES[index % PHASES.length];
     const wave = Math.sin(Number(seconds) * frequency * 3.05 + phase);
     return 0.16 + (wave + 1) / 2 * 0.74;
+}
+
+export function currentBarLevel(index, seconds, options = {}) {
+    return mixBarLevel(fftBarLevel(index), proceduralLevel(index, seconds, options), options);
 }
 
 export function proceduralLevels(seconds, options = {}) {
