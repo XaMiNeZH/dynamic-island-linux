@@ -57,6 +57,8 @@ export function geometryFor(kind, expanded = false) {
         return Geometry.osd;
     case 'charging':
         return Geometry.charging;
+    case 'focus':
+        return Geometry.compact;
     case 'bluetooth':
         return Geometry.system;
     case 'privacy':

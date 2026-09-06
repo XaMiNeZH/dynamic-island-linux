@@ -1006,6 +1006,18 @@ export function buildChargingView(payload) {
     return root;
 }
 
+export function buildFocusView() {
+    const root = new St.BoxLayout({
+        style_class: 'dynamic-island-focus',
+        x_expand: true,
+        y_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    root.add_child(glyphActor(Glyph.focus, 16, '#bf5af2'));
+    root.add_child(label('Do Not Disturb', 'dynamic-island-title', true));
+    return root;
+}
+
 export function buildBluetoothView(payload) {
     const title = label(payload?.name ? payload.name : 'Connected', 'dynamic-island-title');
     const sub = label('Bluetooth', 'dynamic-island-subtitle');
@@ -1107,6 +1119,8 @@ export function buildView(activity, clockText) {
         return buildOsdView({...payload, kind});
     case Kind.CHARGING:
         return buildChargingView(payload);
+    case Kind.FOCUS:
+        return buildFocusView();
     case Kind.BLUETOOTH:
         return buildBluetoothView(payload);
     case Kind.PRIVACY:
