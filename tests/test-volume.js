@@ -6,6 +6,7 @@ import {
     describeSinks,
     sinkIdentity,
     sinkLabel,
+    sinkPickerAvailable,
     volumeFraction,
     volumeTarget,
 } from '../src/lib/volume.js';
@@ -44,6 +45,10 @@ assert(describeSinks([speakers, headphones], headphones, read).find(row => row.a
 assert(describeSinks([speakers, headphones], headphones, read).length === 2,
     'every real Gvc sink is offered');
 assert(describeSinks([], speakers, read).length === 0, 'a missing sink list stays empty');
+assert(!sinkPickerAvailable(describeSinks([speakers], speakers, read)),
+    'a single Gvc sink does not open a picker that would overflow the 84px card');
+assert(sinkPickerAvailable(describeSinks([speakers, headphones], headphones, read)),
+    'two real Gvc sinks can replace the artist line with a picker');
 
 print(`volume: ${passed} passed, ${failed} failed`);
 if (failed)

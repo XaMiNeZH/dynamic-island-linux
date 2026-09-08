@@ -50,6 +50,10 @@ export function describeSinks(sinks, defaultSink, read) {
     return rows;
 }
 
+export function sinkPickerAvailable(outputs) {
+    return (outputs ?? []).length > 1;
+}
+
 /**
  * Owns the real GNOME default output stream. It deliberately reports no
  * control until Gvc returns an actual sink, so the media view never presents

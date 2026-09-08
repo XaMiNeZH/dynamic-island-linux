@@ -24,6 +24,7 @@ import {
     playbackNeedsResync,
     progressFillWidth,
 } from './utils.js';
+import {sinkPickerAvailable} from './volume.js';
 import {
     BAR_COUNT,
     BAR_THICKNESS,
@@ -478,6 +479,7 @@ function mediaVolumeControl(volume) {
     const slider = dragBar('dynamic-island-volume', volume?.level ?? 0, {
         vertical: true,
         onPreview: next => state?.setLevel?.(next),
+        onCommit: next => state?.setLevel?.(next),
     });
     root._dynamicIslandControl = true;
     slider._dynamicIslandControl = true;
@@ -845,6 +847,7 @@ export function buildMediaExpanded(payload) {
         style_class: 'dynamic-island-media-left',
         y_align: Clutter.ActorAlign.CENTER,
     });
+    left.clip_to_allocation = true;
     const volumeSlot = new St.Bin({
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
@@ -907,13 +910,6 @@ export function buildMediaExpanded(payload) {
     });
     textCol.add_child(title);
     textCol.add_child(artist);
-    head.add_child(textCol);
-
-    const eq = equalizer(payload?.playing === true, {accent: true, height: 16});
-    eq.y_align = Clutter.ActorAlign.START;
-    head.add_child(eq);
-    col.add_child(head);
-
     let pickingOutput = false;
     const outputButton = new St.Button({
         style_class: 'dynamic-island-output',
@@ -922,18 +918,27 @@ export function buildMediaExpanded(payload) {
         can_focus: true,
         reactive: true,
         track_hover: true,
+        visible: false,
     });
     outputButton._dynamicIslandControl = true;
-    const outputName = label('', 'dynamic-island-output-label');
+    const outputName = label('', 'dynamic-island-output-label', true);
     outputButton.set_child(outputName);
+    textCol.add_child(outputButton);
+    head.add_child(textCol);
+
+    const eq = equalizer(payload?.playing === true, {accent: true, height: 16});
+    eq.y_align = Clutter.ActorAlign.START;
+    head.add_child(eq);
+    col.add_child(head);
+
     const sinkList = new St.BoxLayout({
         style_class: 'dynamic-island-sink-list',
         vertical: true,
         x_expand: true,
         visible: false,
     });
+    sinkList.clip_to_allocation = true;
     sinkList._dynamicIslandControl = true;
-    col.add_child(outputButton);
     col.add_child(sinkList);
 
     const lengthUs = payload?.lengthUs ?? 0;
@@ -1023,17 +1028,20 @@ export function buildMediaExpanded(payload) {
     root.add_child(col);
 
     const showPicker = picking => {
-        sinkList.visible = picking;
+        const outputs = root._payload?.volume?.outputs ?? [];
+        const showChip = !!root._payload?.volume?.available &&
+            sinkPickerAvailable(outputs);
+        sinkList.visible = picking && showChip;
         seekBlock.visible = !picking;
         bottom.visible = !picking;
-        outputButton.visible = outputButton.visible && !picking;
+        outputButton.visible = showChip && !picking;
+        artist.visible = !showChip || picking;
     };
     const syncOutput = volume => {
         const outputs = volume?.outputs ?? [];
         const active = outputs.find(row => row.active) ?? outputs[0];
         outputName.text = active?.label || '';
-        const showChip = !!volume?.available && outputs.length > 0;
-        outputButton.visible = showChip && !pickingOutput;
+        const showChip = !!volume?.available && outputs.length > 1;
         while (sinkList.get_n_children())
             sinkList.get_child_at_index(0).destroy();
         for (const row of outputs) {
@@ -1054,10 +1062,9 @@ export function buildMediaExpanded(payload) {
             });
             sinkList.add_child(rowButton);
         }
-        if (outputs.length < 2)
+        if (!showChip)
             pickingOutput = false;
-        showPicker(pickingOutput && outputs.length > 1);
-        outputButton.visible = showChip && !pickingOutput;
+        showPicker(pickingOutput && showChip);
     };
     outputButton.connect('clicked', () => {
         const outputs = root._payload?.volume?.outputs ?? [];
@@ -1065,7 +1072,6 @@ export function buildMediaExpanded(payload) {
             return;
         pickingOutput = !pickingOutput;
         showPicker(pickingOutput);
-        outputButton.visible = !pickingOutput;
     });
     syncOutput(payload?.volume);
 
