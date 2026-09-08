@@ -39,7 +39,7 @@ export default class DynamicIslandExtension extends Extension {
 
         this._sources = [];
         this._addSource(() => new MprisSource({stack: this._stack, settings: this._settings}));
-        this._addSource(() => new FftSource());
+        this._addSource(() => new FftSource({stack: this._stack}));
         this._addSource(() => new OsdSource({stack: this._stack, settings: this._settings}));
         this._addSource(() => new BatterySource({stack: this._stack, settings: this._settings}));
         this._addSource(() => new BluetoothSource({stack: this._stack, settings: this._settings}));

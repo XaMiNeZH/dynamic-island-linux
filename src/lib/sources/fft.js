@@ -1,16 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {SourceTracker} from '../utils.js';
-import {setFftLevels, sixBandsFromSpectrum, unpackSpectrumMagnitudes} from '../fft.js';
+import {
+    fftShouldRun,
+    setFftLevels,
+    sixBandsFromSpectrum,
+    spectrumPipelines,
+    unpackSpectrumMagnitudes,
+} from '../fft.js';
 
 export class FftSource {
-    constructor() {
+    constructor({stack} = {}) {
         this._tracker = new SourceTracker();
         this._destroyed = false;
         this._pipeline = null;
         this._bus = null;
         this._control = null;
         this._Gst = null;
+        this._stack = stack ?? null;
+        this._wanted = false;
+        this._unsub = this._stack?.onChange?.(() => this._syncWanted()) ?? null;
 
         Promise.all([
             import('gi://Gst').catch(() => null),
@@ -33,16 +42,20 @@ export class FftSource {
             if (Gvc?.MixerControl) {
                 try {
                     this._control = new Gvc.MixerControl({name: 'dynamic-island-fft'});
-                    this._tracker.connect(this._control, 'state-changed', () => this._restart());
-                    this._tracker.connect(this._control, 'default-sink-changed', () => this._restart());
+                    this._tracker.connect(this._control, 'state-changed', () => {
+                        if (this._wanted)
+                            this._restart();
+                    });
+                    this._tracker.connect(this._control, 'default-sink-changed', () => {
+                        if (this._wanted)
+                            this._restart();
+                    });
                     this._control.open();
-                    this._restart();
-                    return;
                 } catch {
                     this._control = null;
                 }
             }
-            this._start(this._pipelines(null));
+            this._syncWanted();
         }).catch(() => {
             setFftLevels(null);
         });
@@ -57,27 +70,29 @@ export class FftSource {
         }
     }
 
-    _pipelines(sinkName) {
-        const monitor = sinkName ? `${sinkName}.monitor` : null;
-        const launches = [];
-        if (monitor) {
-            launches.push(
-                `pulsesrc device="${monitor}" ! audioconvert ! audio/x-raw,channels=1 ` +
-                '! spectrum bands=24 interval=50000000 threshold=-80 post-messages=true ! fakesink');
+    _syncWanted() {
+        if (this._destroyed)
+            return;
+        const wanted = fftShouldRun(this._stack?.get?.('media'));
+        const changed = wanted !== this._wanted;
+        this._wanted = wanted;
+        if (!wanted) {
+            this._stopPipeline();
+            return;
         }
-        launches.push(
-            'pipewiresrc always-process=true ! audioconvert ! audio/x-raw,channels=1 ' +
-            '! spectrum bands=24 interval=50000000 threshold=-80 post-messages=true ! fakesink');
-        return launches;
+        if (changed || !this._pipeline)
+            this._restart();
     }
 
     _restart() {
         this._stopPipeline();
-        this._start(this._pipelines(this._sinkName()));
+        if (!this._wanted)
+            return;
+        this._start(spectrumPipelines(this._sinkName()));
     }
 
     _start(launches) {
-        if (this._destroyed || !this._Gst)
+        if (this._destroyed || !this._Gst || !this._wanted)
             return;
         for (const launch of launches) {
             try {
@@ -98,7 +113,7 @@ export class FftSource {
     }
 
     _onMessage(message) {
-        if (this._destroyed)
+        if (this._destroyed || !this._wanted)
             return;
         try {
             if (message.type !== this._Gst.MessageType.ELEMENT)
@@ -149,6 +164,9 @@ export class FftSource {
 
     destroy() {
         this._destroyed = true;
+        this._wanted = false;
+        this._unsub?.();
+        this._unsub = null;
         this._stopPipeline();
         this._tracker.destroy();
         if (this._control) {
@@ -160,5 +178,6 @@ export class FftSource {
         }
         this._control = null;
         this._Gst = null;
+        this._stack = null;
     }
 }

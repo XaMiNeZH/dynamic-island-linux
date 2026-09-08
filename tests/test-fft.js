@@ -3,9 +3,12 @@
 
 import {
     fftBarLevel,
+    fftShouldRun,
     mixBarLevel,
+    monitorDeviceName,
     setFftLevels,
     sixBandsFromSpectrum,
+    spectrumPipelines,
     unpackSpectrumMagnitudes,
 } from '../src/lib/fft.js';
 import {BAR_COUNT, currentBarLevel, proceduralLevel} from '../src/lib/waveform.js';
@@ -45,6 +48,22 @@ assert(currentBarLevel(0, 0.4, {playing: true}) !==
     proceduralLevel(0, 0.4, {playing: true}),
     'a live FFT band changes the painted height');
 setFftLevels(null);
+
+assert(monitorDeviceName('alsa_output.pci-0000_00_1f.3.analog-stereo') ===
+    'alsa_output.pci-0000_00_1f.3.analog-stereo.monitor',
+    'Gvc sink names map to a Pulse monitor');
+assert(monitorDeviceName('sink.monitor') === 'sink.monitor',
+    'an already-monitor name is not doubled');
+assert(monitorDeviceName('evil"name') == null, 'quoted sink names are rejected');
+assert(monitorDeviceName('') == null, 'empty sink names yield no pipeline');
+assert(spectrumPipelines(null).length === 0, 'no sink means no capture pipeline');
+assert(spectrumPipelines('speakers').every(line => line.includes('.monitor')),
+    'every launch line taps a monitor, not a microphone');
+assert(!spectrumPipelines('speakers').some(line => line.includes('always-process')),
+    'pipelines do not keep a default pipewiresrc running');
+assert(fftShouldRun({payload: {playing: true}}), 'FFT runs only while media plays');
+assert(!fftShouldRun({payload: {playing: false}}), 'paused media stops the monitor tap');
+assert(!fftShouldRun(null), 'idle sessions do not tap audio');
 
 print(`fft: ${passed} passed, ${failed} failed`);
 if (failed)

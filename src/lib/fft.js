@@ -70,3 +70,29 @@ export function unpackSpectrumMagnitudes(raw) {
     }
     return [];
 }
+
+const MONITOR_NAME = /^[A-Za-z0-9._:-]+$/;
+
+/** Pulse/PipeWire monitor only — never a raw capture source. */
+export function monitorDeviceName(sinkName) {
+    const name = String(sinkName ?? '').trim();
+    if (!MONITOR_NAME.test(name))
+        return null;
+    return name.endsWith('.monitor') ? name : `${name}.monitor`;
+}
+
+export function spectrumPipelines(sinkName) {
+    const monitor = monitorDeviceName(sinkName);
+    if (!monitor)
+        return [];
+    const tail = 'audioconvert ! audio/x-raw,channels=1 ' +
+        '! spectrum bands=24 interval=50000000 threshold=-80 post-messages=true ! fakesink';
+    return [
+        `pulsesrc device="${monitor}" ! ${tail}`,
+        `pipewiresrc target-object="${monitor}" ! ${tail}`,
+    ];
+}
+
+export function fftShouldRun(media) {
+    return media?.payload?.playing === true;
+}
