@@ -1041,7 +1041,7 @@ export function buildMediaExpanded(payload) {
         const outputs = volume?.outputs ?? [];
         const active = outputs.find(row => row.active) ?? outputs[0];
         outputName.text = active?.label || '';
-        const showChip = !!volume?.available && outputs.length > 1;
+        const showChip = !!volume?.available && sinkPickerAvailable(outputs);
         while (sinkList.get_n_children())
             sinkList.get_child_at_index(0).destroy();
         for (const row of outputs) {
@@ -1068,7 +1068,7 @@ export function buildMediaExpanded(payload) {
     };
     outputButton.connect('clicked', () => {
         const outputs = root._payload?.volume?.outputs ?? [];
-        if (outputs.length < 2)
+        if (!sinkPickerAvailable(outputs))
             return;
         pickingOutput = !pickingOutput;
         showPicker(pickingOutput);
