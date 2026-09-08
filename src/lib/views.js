@@ -966,6 +966,7 @@ export function buildOsdView(payload) {
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
+    root.clip_to_allocation = true;
     root.add_child(glyph);
     if (bar)
         root.add_child(bar);

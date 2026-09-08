@@ -246,6 +246,7 @@
 .dynamic-island-osd {
     spacing: 12px;
     min-height: 8px;
+    min-width: 0;
 }
 
 .dynamic-island-level {
