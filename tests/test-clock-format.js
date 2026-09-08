@@ -30,6 +30,8 @@ assert(/AM|PM/i.test(h12), `12h includes meridiem: ${h12}`);
 assert(classifyOsd({names: ['display-brightness-symbolic']}, '') === 'brightness', 'brightness icon');
 assert(classifyOsd({names: ['audio-volume-high-symbolic']}, 'Volume') === 'volume', 'volume icon');
 assert(classifyOsd({iconName: 'microphone-sensitivity-muted-symbolic'}, 'Microphone') === 'mute', 'mic icon');
+assert(classifyOsd({names: ['airplane-mode-symbolic']}, 'Airplane Mode') == null,
+    'airplane is not a mute HUD');
 
 assert(formatMediaClockUs(0) === '0:00', 'zero media clock');
 assert(formatMediaClockUs(65_000_000) === '1:05', 'media clock minutes');
