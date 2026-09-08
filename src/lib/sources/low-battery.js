@@ -19,6 +19,8 @@ export class LowBatterySource {
         this._stack = stack;
         this._settings = settings;
         this._tracker = new SourceTracker();
+        this._proxy = null;
+        this._watchId = 0;
         this._wasLow = false;
         this._state = {
             present: false,
@@ -30,9 +32,23 @@ export class LowBatterySource {
         this._tracker.connect(settings, 'changed::enable-low-battery', () => this._publish());
 
         try {
+            this._watchId = Gio.DBus.system.watch_name(
+                UPOWER_NAME,
+                Gio.BusNameWatcherFlags.NONE,
+                () => this._bind(),
+                () => this._unbind());
+        } catch {
+            this._watchId = 0;
+        }
+    }
+
+    _bind() {
+        if (this._proxy)
+            return;
+        try {
             this._proxy = Gio.DBusProxy.new_for_bus_sync(
                 Gio.BusType.SYSTEM,
-                Gio.DBusProxyFlags.NONE,
+                Gio.DBusProxyFlags.DO_NOT_AUTO_START,
                 null,
                 UPOWER_NAME,
                 DISPLAY_PATH,
@@ -43,10 +59,10 @@ export class LowBatterySource {
                 this._read();
                 this._publish();
             });
+            this._publish();
         } catch {
             this._proxy = null;
         }
-        this._publish();
     }
 
     _read() {
@@ -93,10 +109,23 @@ export class LowBatterySource {
         });
     }
 
-    destroy() {
-        this._tracker.destroy();
-        this._stack.remove('low-battery');
+    _unbind() {
         this._proxy = null;
+        this._wasLow = false;
+        this._stack.remove('low-battery');
+    }
+
+    destroy() {
+        if (this._watchId) {
+            try {
+                Gio.DBus.system.unwatch_name(this._watchId);
+            } catch {
+                // already gone
+            }
+            this._watchId = 0;
+        }
+        this._unbind();
+        this._tracker.destroy();
         this._stack = null;
         this._settings = null;
     }
