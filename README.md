@@ -57,7 +57,7 @@ The panel date/time stays where GNOME put it. Right-click the idle notch to open
 
 A later release can add a hybrid dashboard. v1 is Apple-faithful only: live activities and transients, no weather/notes hub.
 
-Compact and expanded media tint the six-bar waveform from album art. Bars grow from the center (silence is a row of dots). GNOME has no per-app audio tap, so the motion is procedural rather than a live FFT.
+Compact and expanded media tint the six-bar waveform from album art. Bars grow from the center (silence is a row of dots). When PipeWire/GStreamer can tap the default output monitor the bars follow a live 6-band FFT; otherwise they fall back to procedural motion.
 
 ## Preferences
 
