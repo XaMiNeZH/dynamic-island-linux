@@ -300,10 +300,12 @@
 
 .dynamic-island-media-expanded {
     spacing: 10px;
+    min-width: 0;
 }
 
 .dynamic-island-media-left {
     spacing: 5px;
+    min-width: 0;
 }
 
 .dynamic-island-media-volume {

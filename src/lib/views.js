@@ -478,6 +478,7 @@ function mediaVolumeControl(volume) {
     const slider = dragBar('dynamic-island-volume', volume?.level ?? 0, {
         vertical: true,
         onPreview: next => state?.setLevel?.(next),
+        onCommit: next => state?.setLevel?.(next),
     });
     root._dynamicIslandControl = true;
     slider._dynamicIslandControl = true;
@@ -845,6 +846,7 @@ export function buildMediaExpanded(payload) {
         style_class: 'dynamic-island-media-left',
         y_align: Clutter.ActorAlign.CENTER,
     });
+    left.clip_to_allocation = true;
     const volumeSlot = new St.Bin({
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
