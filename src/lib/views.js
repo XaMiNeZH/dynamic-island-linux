@@ -1137,6 +1137,10 @@ export function buildView(activity, clockText) {
         return buildOsdView({...payload, kind});
     case Kind.CHARGING:
         return buildChargingView(payload);
+    case Kind.AIRPLANE:
+        return buildAirplaneView(payload);
+    case Kind.WIFI:
+        return buildWifiView(payload);
     case Kind.BLUETOOTH:
         return buildBluetoothView(payload);
     case Kind.PRIVACY:
