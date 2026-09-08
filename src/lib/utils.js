@@ -100,7 +100,11 @@ export function classifyOsd(icon, label) {
         return 'brightness';
     if (text.includes('mic') || text.includes('audio-input') || text.includes('microphone'))
         return 'mute';
-    return 'volume';
+    if (text.includes('audio-volume') || text.includes('audio-speaker') ||
+        text.includes('headphone') || text.includes('volume') || text.includes('speaker'))
+        return 'volume';
+    // Keyboard layout, caps lock, and other Shell OSDs stay native.
+    return null;
 }
 
 export function formatMediaClockUs(us) {

@@ -32,6 +32,10 @@ assert(classifyOsd({names: ['audio-volume-high-symbolic']}, 'Volume') === 'volum
 assert(classifyOsd({iconName: 'microphone-sensitivity-muted-symbolic'}, 'Microphone') === 'mute', 'mic icon');
 assert(classifyOsd({names: ['airplane-mode-symbolic']}, 'Airplane Mode') == null,
     'airplane is not a mute HUD');
+assert(classifyOsd({names: ['input-keyboard-symbolic']}, 'US') == null,
+    'keyboard layout OSD stays stock');
+assert(classifyOsd({names: ['audio-volume-muted-symbolic']}, '') === 'volume',
+    'muted speaker is still the volume HUD');
 
 assert(formatMediaClockUs(0) === '0:00', 'zero media clock');
 assert(formatMediaClockUs(65_000_000) === '1:05', 'media clock minutes');
