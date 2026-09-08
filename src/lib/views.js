@@ -15,6 +15,7 @@ import {
     paintGlyph,
 } from './glyphs.js';
 import {requestPalette} from './palette-load.js';
+import {powerProfileHeadline} from './power-profile.js';
 import {FALLBACK_PALETTE, mixHex} from './palette.js';
 import {
     displayedPlaybackUs,
