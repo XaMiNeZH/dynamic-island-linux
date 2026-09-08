@@ -3,7 +3,7 @@
 
 import {Kind, Priority} from '../src/lib/activity-stack.js';
 import {Geometry, geometryFor, isExpandedGeometry} from '../src/lib/constants.js';
-import {isFocusActive} from '../src/lib/focus.js';
+import {focusShouldToast, isFocusActive} from '../src/lib/focus.js';
 import {privacyHeadline} from '../src/lib/privacy.js';
 
 let passed = 0;
@@ -21,9 +21,12 @@ function assert(condition, message) {
 assert(isFocusActive(false), 'disabled notification banners activate the focus pill');
 assert(!isFocusActive(true), 'enabled notification banners do not activate focus');
 assert(!isFocusActive(false, false), 'lock or greeter sessions cannot receive focus chrome');
+assert(focusShouldToast(false, true), 'turning DND on posts a compact toast');
+assert(!focusShouldToast(true, true), 'an already-on DND session does not keep covering media');
+assert(!focusShouldToast(true, false), 'turning DND off does not toast');
 assert(Kind.FOCUS === 'focus', 'focus has an explicit activity kind');
 assert(Priority[Kind.FOCUS] > Priority[Kind.MEDIA],
-    'focus remains visible ahead of ordinary media');
+    'the focus toast can preempt media for the hold time');
 assert(Priority[Kind.FOCUS] < Priority[Kind.PRIVACY],
     'privacy indicators retain their higher-priority safety signal');
 assert(geometryFor('focus').width === Geometry.charging.width,

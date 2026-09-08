@@ -5,7 +5,7 @@ import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {Kind} from '../activity-stack.js';
-import {isFocusActive} from '../focus.js';
+import {focusShouldToast, isFocusActive} from '../focus.js';
 import {SourceTracker} from '../utils.js';
 
 const NOTIFICATION_SCHEMA = 'org.gnome.desktop.notifications';
@@ -16,6 +16,7 @@ export class FocusSource {
         this._settings = settings;
         this._tracker = new SourceTracker();
         this._notificationSettings = null;
+        this._wasActive = false;
 
         this._tracker.connect(settings, 'changed::enable-focus', () => this._publish());
         this._tracker.connect(Main.sessionMode, 'updated', () => this._publish());
@@ -37,6 +38,7 @@ export class FocusSource {
     _publish() {
         if (!this._settings.get_boolean('enable-focus') || !this._notificationSettings) {
             this._stack.remove('focus');
+            this._wasActive = false;
             return;
         }
         let showBanners = true;
@@ -44,16 +46,23 @@ export class FocusSource {
             showBanners = this._notificationSettings.get_boolean('show-banners');
         } catch {
             this._stack.remove('focus');
+            this._wasActive = false;
             return;
         }
-        if (!isFocusActive(showBanners, this._sessionIsUsable())) {
+        const active = isFocusActive(showBanners, this._sessionIsUsable());
+        if (!active) {
             this._stack.remove('focus');
+            this._wasActive = false;
             return;
         }
+        if (!focusShouldToast(this._wasActive, active))
+            return;
+        this._wasActive = true;
         this._stack.upsert({
             id: 'focus',
             kind: Kind.FOCUS,
-            persistent: true,
+            persistent: false,
+            durationMs: this._settings.get_int('system-timeout'),
             payload: {},
         });
     }
@@ -64,5 +73,6 @@ export class FocusSource {
         this._stack = null;
         this._settings = null;
         this._notificationSettings = null;
+        this._wasActive = false;
     }
 }

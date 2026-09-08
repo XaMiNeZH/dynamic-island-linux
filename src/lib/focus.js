@@ -8,3 +8,8 @@
 export function isFocusActive(showBanners, sessionIsUsable = true) {
     return sessionIsUsable && showBanners === false;
 }
+
+/** Rising edge only — a persistent DND pill would hide media for the whole session. */
+export function focusShouldToast(wasActive, isActive) {
+    return isActive === true && wasActive !== true;
+}
