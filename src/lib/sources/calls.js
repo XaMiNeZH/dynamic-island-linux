@@ -9,7 +9,6 @@ import {SourceTracker} from '../utils.js';
 const CALLS_NAME = 'org.gnome.Calls';
 const CALLS_PATH = '/org/gnome/Calls';
 const CALL_IFACE = 'org.gnome.Calls.Call';
-const OBJECT_MANAGER = 'org.freedesktop.DBus.ObjectManager';
 const PROPS_IFACE = 'org.freedesktop.DBus.Properties';
 
 const ManagerIface = `
@@ -109,20 +108,22 @@ export class CallsSource {
             return;
         try {
             const [objects] = await this._manager.GetManagedObjectsAsync();
+            if (!this._manager)
+                return;
             for (const [path, ifaces] of Object.entries(objects ?? {}))
                 this._ingest(path, ifaces);
         } catch {
             // Calls exported no objects yet.
         }
+        if (!this._manager)
+            return;
 
         this._addedId = this._manager.connectSignal('InterfacesAdded',
             (_p, _s, [path, ifaces]) => this._ingest(path, ifaces));
         this._removedId = this._manager.connectSignal('InterfacesRemoved',
-            (_p, _s, [path, ifaces]) => {
-                if (ifaces?.includes?.(CALL_IFACE) || ifaces?.includes?.(OBJECT_MANAGER))
-                    this._drop(path);
-            });
+            (_p, _s, [path]) => this._drop(path));
 
+        this._clearPropSub();
         this._propSub = this._tracker.subscribe(
             Gio.DBus.session,
             CALLS_NAME,
@@ -149,13 +150,9 @@ export class CallsSource {
     }
 
     _onProps(path, changed) {
-        const current = this._calls.get(path) ?? {
-            inbound: false,
-            state: CallState.UNKNOWN,
-            id: '',
-            displayName: '',
-            protocol: '',
-        };
+        const current = this._calls.get(path);
+        if (!current)
+            return;
         if (changed?.Inbound != null)
             current.inbound = unpackMaybe(changed.Inbound) === true;
         if (changed?.State != null)
@@ -218,7 +215,19 @@ export class CallsSource {
         });
     }
 
+    _clearPropSub() {
+        if (!this._propSub)
+            return;
+        try {
+            Gio.DBus.session.signal_unsubscribe(this._propSub);
+        } catch {
+            // already dropped
+        }
+        this._propSub = 0;
+    }
+
     _unbind() {
+        this._clearPropSub();
         if (this._addedId && this._manager) {
             try {
                 this._manager.disconnectSignal(this._addedId);

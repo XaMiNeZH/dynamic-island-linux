@@ -70,5 +70,5 @@ export function pickForegroundCall(calls) {
             return 0;
         }
     };
-    return live.sort((a, b) => rank(b.state) - rank(a.state))[0];
+    return live.slice().sort((a, b) => rank(b.state) - rank(a.state))[0];
 }
