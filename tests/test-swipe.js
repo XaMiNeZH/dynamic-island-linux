@@ -26,6 +26,8 @@ assert(swipeAction('down', {kind: 'media', expanded: true}) === 'collapse',
 assert(swipeAction('down', {kind: 'media', expanded: false}) == null,
     'compact media is not dismissed by a swipe');
 assert(swipeAction('down', {kind: 'idle'}) == null, 'the idle notch ignores swipes');
+assert(swipeAction('down', {kind: 'charging'}) == null,
+    'charging toasts are not dismissed by a swipe that should stay a tap');
 assert(swipeAction(null, {kind: 'volume'}) == null, 'no intent does nothing');
 
 print(`swipe: ${passed} passed, ${failed} failed`);

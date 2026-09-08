@@ -280,6 +280,10 @@ export const Island = GObject.registerClass({
             } catch {
                 this._gestureCapture = 0;
             }
+            if (!this._gestureCapture) {
+                this._gesture = null;
+                this.emit('primary-click');
+            }
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
